@@ -1,0 +1,462 @@
+// ============================================================
+// platform.js — 拼豆制作平台（编辑器 + 熨烫模拟 + 模板 + AI 桥接）
+// 把 2D 拼豆完整工作流（摆豆/图层/色板/限色/BOM/熨烫）搬进 3D 工坊
+// ============================================================
+
+import { BeadProject, STANDARD_BOARD } from './project.js';
+import { LayerCanvas } from './editor2d.js';
+import { BRAND_PALETTES, BRAND_ORDER } from './brand-palettes.js';
+import { PALETTES, PaletteMatcher, hexToRgb } from './palette.js';
+import { ironResult, applyIron, estimateHours } from './iron.js';
+
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  project: null,
+  layerCanvas: null,
+  tool: 'brush',
+  brand: 'mard-291',
+  color: 0,
+  editing: false,
+};
+
+// ---------- 初始化 ----------
+export function initPlatform(viewer, ctx) {
+  state.viewer = viewer;
+  state.ctx = ctx; // { state, toast, setStep, updateStatsUI, exportPatternPNG, exportBOMCSV, exportModelJSON, exportShareCard }
+
+  // 品牌色板下拉
+  const sel = $('selBrand');
+  sel.innerHTML = BRAND_ORDER.map(k =>
+    `<option value="${k}">${BRAND_PALETTES[k].name}（${BRAND_PALETTES[k].colors.length}色）</option>`
+  ).join('');
+  sel.value = 'mard-291';
+  sel.addEventListener('change', () => {
+    state.brand = sel.value;
+    $('valBrand').textContent = BRAND_PALETTES[state.brand].name.replace(/（.*）/, '');
+  });
+
+  // 创作方式切换
+  $('modeTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.src-tab');
+    if (!btn) return;
+    const mode = btn.dataset.mode;
+    // 从编辑模式切回 AI 造物 = 退出编辑
+    if (state.editing && mode === 'ai') { exitEdit(); return; }
+    if (state.editing && mode === 'new') { exitEdit(); }
+    $('modeTabs').querySelectorAll('.src-tab').forEach(b => b.classList.toggle('active', b === btn));
+    $('aiPanel').hidden = mode !== 'ai';
+    $('newProjectPanel').hidden = mode !== 'new';
+    if (mode === 'new' && !state.editing) $('ironPanel').hidden = true;
+  });
+
+  // 创建空白作品
+  $('btnCreateProject').addEventListener('click', () => {
+    const w = clampInt($('inpW').value, 4, 120, 29);
+    const d = clampInt($('inpD').value, 4, 120, 29);
+    const h = clampInt($('inpH').value, 1, 80, 8);
+    const palette = BRAND_PALETTES[state.brand];
+    const p = new BeadProject(w, d, h, palette);
+    p.name = $('inpProjName').value.trim() || '我的立体拼豆';
+    enterEdit(p);
+    state.ctx.toast(`已创建 ${w}×${d}×${h} 空白作品，用左侧工具在钉板上摆豆吧`, 'ok', 4000);
+  });
+
+  // 模板
+  document.querySelectorAll('[data-tpl]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const palette = BRAND_PALETTES[state.brand];
+      const p = buildTemplate(btn.dataset.tpl, palette);
+      p.name = $('inpProjName').value.trim() || '模板作品';
+      enterEdit(p);
+      state.ctx.toast('模板已生成，可直接修改或熨烫', 'ok');
+    });
+  });
+
+  // AI 结果 → 编辑器
+  $('btnEditProject').addEventListener('click', () => bridgeFromAI());
+
+  initToolbar();
+  initLayerStrip();
+  initIronPanel();
+}
+
+// ---------- 进入/退出编辑模式 ----------
+function enterEdit(project) {
+  state.project = project;
+  state.editing = true;
+  $('aiPanel').hidden = true;
+  $('newProjectPanel').hidden = true;
+  $('ironPanel').hidden = false;
+  $('editorToolbar').hidden = false;
+  $('boardWrap').hidden = false;
+  $('stageOverlay').style.display = 'none';
+  $('stageTools').hidden = false;
+  $('stageHud').hidden = false;
+  document.querySelector('.stage-wrap').classList.add('editing');
+  $('btnEditProject').hidden = true;
+
+  // 2D 钉板画布
+  if (!state.layerCanvas) {
+    state.layerCanvas = new LayerCanvas($('boardCanvas'), project);
+    state.layerCanvas.onEdit = () => { syncAll(); };
+  } else {
+    state.layerCanvas.project = project;
+    state.layerCanvas.resetView();
+  }
+  // 默认选一个顺眼的颜色（红色系）
+  const redIdx = project.palette.colors.findIndex(c => /^#([eE]|[dD])/.test(c.hex) && c.hex.match(/^#(.)\1\1/i) === null && parseInt(c.hex.slice(1, 3), 16) > 150);
+  state.color = redIdx >= 0 ? redIdx : 0;
+  state.layerCanvas.color = state.color;
+  buildPaletteGrid();
+  updatePaletteCurrent();
+
+  // 3D：俯视编辑视角 + 同步模型
+  state.viewer.setEditView(true, project);
+  state.viewer.syncProject(project);
+  syncAll();
+  state.ctx.toast('已进入编辑器：在钉板上摆豆，3D 实时同步', '', 3000);
+}
+
+function exitEdit() {
+  state.editing = false;
+  state.project = null;
+  $('aiPanel').hidden = false;
+  $('newProjectPanel').hidden = true;
+  $('ironPanel').hidden = true;
+  $('editorToolbar').hidden = true;
+  $('boardWrap').hidden = true;
+  document.querySelector('.stage-wrap').classList.remove('editing');
+  state.viewer.setEditView(false, null);
+  $('modeTabs').querySelectorAll('.src-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === 'ai'));
+}
+
+// ---------- 工具栏 ----------
+function initToolbar() {
+  document.querySelectorAll('.etool[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.etool[data-tool]').forEach(b => b.classList.toggle('active', b === btn));
+      state.tool = btn.dataset.tool;
+      if (state.layerCanvas) {
+        state.layerCanvas.tool = state.tool;
+        $('boardCanvas').style.cursor = state.tool === 'pick' ? 'copy' : 'crosshair';
+      }
+    });
+  });
+  const bind = (id, fn) => $(id).addEventListener('click', fn);
+  bind('btnMirrorX', () => toggleMirror('x'));
+  bind('btnMirrorZ', () => toggleMirror('z'));
+  bind('btnRadial', () => {
+    const p = state.project;
+    if (!p) return;
+    p.snapshot();
+    p.radial(4);
+    syncAll();
+    state.ctx.toast('已应用 4 路径向对称', 'ok', 2000);
+  });
+  bind('btnUndo', () => { state.project?.undo(); syncAll(); });
+  bind('btnRedo', () => { state.project?.redo(); syncAll(); });
+  $('rngBrush').addEventListener('input', (e) => {
+    const r = parseInt(e.target.value);
+    if (state.layerCanvas) state.layerCanvas.brush = r;
+    $('valBrush').textContent = `${r * 2 + 1}×${r * 2 + 1}`;
+  });
+  bind('btnCodes', () => {
+    if (!state.layerCanvas) return;
+    state.layerCanvas.showCodes = !state.layerCanvas.showCodes;
+    $('btnCodes').classList.toggle('active', state.layerCanvas.showCodes);
+    state.layerCanvas.redraw();
+  });
+}
+function toggleMirror(axis) {
+  if (!state.layerCanvas) return;
+  state.layerCanvas.mirror[axis] = !state.layerCanvas.mirror[axis];
+  $(axis === 'x' ? 'btnMirrorX' : 'btnMirrorZ').classList.toggle('warn-on', state.layerCanvas.mirror[axis]);
+  state.layerCanvas.redraw();
+}
+
+// ---------- 层面板 ----------
+function initLayerStrip() {
+  const bind = (id, fn) => $(id).addEventListener('click', fn);
+  bind('btnLayerPrev', () => { if (state.project?.moveLayer(-1)) afterLayerChange(); });
+  bind('btnLayerNext', () => { if (state.project?.moveLayer(1)) afterLayerChange(); });
+  bind('btnAddLayer', () => { if (state.project?.addLayer()) afterLayerChange(); });
+  bind('btnDupLayer', () => { if (state.project?.duplicateLayer()) afterLayerChange(); });
+  bind('btnDelLayer', () => { if (state.project?.deleteLayer()) afterLayerChange(); });
+  bind('btnClearLayer', () => {
+    const p = state.project;
+    if (!p) return;
+    p.snapshot();
+    p.clearLayer();
+    syncAll();
+  });
+}
+function afterLayerChange() {
+  const p = state.project;
+  if (!p) return;
+  state.viewer.buildPegboard(p);
+  state.viewer.syncProject(p);
+  syncAll();
+}
+
+// ---------- 色板选择器 ----------
+function buildPaletteGrid() {
+  const grid = $('palGrid');
+  const colors = state.project.palette.colors;
+  grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  colors.forEach((c, i) => {
+    const el = document.createElement('i');
+    el.style.background = c.hex;
+    el.title = `${c.code} ${c.name}`;
+    el.addEventListener('click', () => {
+      state.color = i;
+      state.layerCanvas.color = i;
+      updatePaletteCurrent();
+    });
+    frag.appendChild(el);
+  });
+  grid.appendChild(frag);
+  updatePaletteCurrent();
+}
+function updatePaletteCurrent() {
+  const c = state.project.palette.colors[state.color];
+  if (!c) return;
+  $('palCurrentChip').style.background = c.hex;
+  $('palCurrentCode').textContent = c.code;
+  $('palGrid').querySelectorAll('i').forEach((el, i) => el.classList.toggle('sel', i === state.color));
+}
+
+// ---------- 熨烫面板 ----------
+function initIronPanel() {
+  const update = () => {
+    const temp = parseInt($('rngTemp').value);
+    const sec = parseInt($('rngSec').value);
+    const sides = parseInt($('selSides').value);
+    $('valTemp').textContent = `${temp}°C`;
+    $('valSec').textContent = `${sec} 秒`;
+    const r = ironResult(temp, sec, sides);
+    const lv = ['未熨烫', '轻熨', '标准熨', '全熔'][r.level];
+    $('valIronLevel').textContent = lv;
+    $('ironLive').innerHTML =
+      `<span class="lv">预计熔合：${lv}</span>` +
+      r.warnings.map(w => `<span class="w">${w}</span>`).join('') +
+      r.tips.slice(0, 2).map(t => `<span class="t">${t}</span>`).join('');
+    return r;
+  };
+  ['rngTemp', 'rngSec', 'selSides'].forEach(id => $(id).addEventListener('input', update));
+  update();
+
+  const doIron = (all) => {
+    const p = state.project;
+    if (!p) return;
+    const r = update();
+    p.snapshot();
+    applyIron(p, all ? -1 : p.current, r.level);
+    state.viewer.heatPulse(p.current);
+    syncAll();
+    const names = ['未熨烫', '轻熨', '标准熨', '全熔'];
+    state.ctx.toast(`${all ? '全部层' : `第 ${p.current + 1} 层`}已熨烫：${names[r.level]}`, r.level >= 3 ? 'err' : 'ok', 3000);
+  };
+  $('btnIronLayer').addEventListener('click', () => doIron(false));
+  $('btnIronAll').addEventListener('click', () => doIron(true));
+  $('btnUniron').addEventListener('click', () => {
+    const p = state.project;
+    if (!p) return;
+    p.snapshot();
+    applyIron(p, -1, 0);
+    syncAll();
+    state.ctx.toast('已重置熨烫状态');
+  });
+}
+
+// ---------- 同步（3D + 统计 + BOM + 警示） ----------
+function syncAll() {
+  const p = state.project;
+  if (!p) return;
+  state.viewer.syncProject(p);
+  state.layerCanvas.redraw();
+
+  // 统计
+  const usage = p.usage();
+  const beadCount = p.totalBeads();
+  const colorCount = usage.size;
+  const bounds = p.bounds();
+  const layersUsed = p.layers.filter(l => l.some(v => v > 0)).length;
+  const boards = p.boardCount();
+  const floating = p.floatingBeads();
+  const stats = {
+    beadCount, colorCount,
+    layerCount: layersUsed,
+    sizeText: p.sizeText(p.palette.diameterMm),
+    hours: estimateHours(beadCount, colorCount),
+    boards: boards.perLayer,
+  };
+  const beads = [];
+  for (let y = 0; y < p.h; y++) {
+    const l = p.layers[y];
+    for (let z = 0; z < p.d; z++) {
+      for (let x = 0; x < p.w; x++) {
+        const v = l[z * p.w + x];
+        if (v > 0) beads.push({ x, y, z, p: v - 1 });
+      }
+    }
+  }
+  state.ctx.state.result = {
+    beads, gridN: Math.max(p.w, p.d), palette: p.palette, usage, stats,
+    beadMM: p.palette.diameterMm, project: p,
+  };
+
+  // UI
+  $('statBeads').textContent = beadCount.toLocaleString();
+  $('statColors').textContent = colorCount;
+  $('statLayers').textContent = layersUsed;
+  $('statSize').textContent = stats.sizeText;
+  $('layerCur').textContent = p.current + 1;
+  $('layerTotal').textContent = p.h;
+
+  // 悬空警示
+  const warn = $('warnBox');
+  if (floating > 0) {
+    warn.hidden = false;
+    warn.innerHTML = `⚠️ <b>${floating}</b> 颗豆悬空（下方没有支撑）——现实里会掉。<br>请在下一层对应位置补豆，或把本层豆移到有支撑处。`;
+  } else if (beadCount > 0 && p.current > 0) {
+    warn.hidden = false;
+    warn.innerHTML = `✅ 本层所有豆子都有支撑，结构稳定。`;
+  } else {
+    warn.hidden = true;
+  }
+
+  // 色板条 + BOM
+  const strip = $('paletteStrip');
+  strip.innerHTML = '';
+  [...usage.entries()].sort((a, b) => b[1] - a[1]).forEach(([idx, count]) => {
+    const c = p.palette.colors[idx];
+    const i = document.createElement('i');
+    i.style.background = c.hex;
+    i.title = `${c.code} ${c.name} × ${count}`;
+    strip.appendChild(i);
+  });
+  const bom = $('bomPreview');
+  const entries = [...usage.entries()].sort((a, b) => b[1] - a[1]);
+  const diff = beadCount < 800 ? '★ 简单' : beadCount < 2500 ? '★★ 适中' : beadCount < 6000 ? '★★★ 挑战' : '★★★★ 大神';
+  bom.innerHTML = `<p class="hint" style="margin-bottom:8px">预计工时 <b>${stats.hours < 1 ? Math.round(stats.hours * 60) + ' 分钟' : stats.hours.toFixed(1) + ' 小时'}</b> · 难度 ${diff} · 每层需 <b>${boards.perLayer}</b> 块 29×29 钉板 · ${p.palette.name}</p>`;
+  entries.slice(0, 12).forEach(([idx, count]) => {
+    const c = p.palette.colors[idx];
+    const row = document.createElement('div');
+    row.className = 'bom-row';
+    row.innerHTML = `<i style="background:${c.hex}"></i><code>${c.code}</code>${c.name}<span class="bom-count">×${count}</span>`;
+    bom.appendChild(row);
+  });
+  if (entries.length > 12) {
+    const more = document.createElement('p');
+    more.className = 'hint';
+    more.style.marginTop = '6px';
+    more.textContent = `…共 ${entries.length} 色，导出 CSV 查看完整清单`;
+    bom.appendChild(more);
+  }
+
+  ['btnExportPng', 'btnExportCsv', 'btnExportJson', 'btnShareCard'].forEach(id => $(id).disabled = false);
+  $('hudCount').textContent = `${beadCount} 颗`;
+  $('hudBarFill').style.width = '100%';
+  $('hudMode').textContent = `编辑模式 · 第 ${p.current + 1} 层`;
+}
+
+// ---------- AI 结果 → 工程 ----------
+function bridgeFromAI() {
+  const r = state.ctx.state.result;
+  if (!r || !r.beads?.length) return state.ctx.toast('先让 AI 生成一个作品', 'err');
+  const gridN = r.gridN;
+  const target = BRAND_PALETTES[state.brand];
+  const srcPalette = r.palette;
+  // AI 色板 → 品牌色板：按 HEX 用 CIEDE2000 就近映射
+  const matcher = new PaletteMatcher(target);
+  const colorMap = new Map();
+  for (let i = 0; i < srcPalette.colors.length; i++) {
+    if (colorMap.has(i)) continue;
+    const [rr, gg, bb] = hexToRgb(srcPalette.colors[i].hex);
+    colorMap.set(i, matcher.match(rr, gg, bb));
+  }
+  const p = new BeadProject(gridN, gridN, gridN, target);
+  p.name = 'AI 作品精修';
+  for (const b of r.beads) {
+    if (b.y < p.h && b.x < p.w && b.z < p.d) {
+      p.layers[b.y][b.z * p.w + b.x] = colorMap.get(b.p) + 1;
+    }
+  }
+  // 裁剪到实际占用范围，减小编辑面积
+  const bounds = p.bounds();
+  if (bounds) {
+    const w = bounds.x1 - bounds.x0 + 1, d = bounds.z1 - bounds.z0 + 1;
+    const h = bounds.y1 - bounds.y0 + 1;
+    const q = new BeadProject(w, d, h, target);
+    q.name = p.name;
+    for (let y = 0; y < h; y++) {
+      for (let z = 0; z < d; z++) {
+        for (let x = 0; x < w; x++) {
+          q.layers[y][z * w + x] = p.layers[bounds.y0 + y][(bounds.z0 + z) * p.w + bounds.x0 + x];
+        }
+      }
+    }
+    enterEdit(q);
+  } else {
+    enterEdit(p);
+  }
+  state.ctx.toast('已转入编辑器，可逐层精修后导出', 'ok', 4000);
+}
+// ---------- 模板生成 ----------
+function buildTemplate(kind, palette) {
+  let p;
+  if (kind === 'box') {
+    p = new BeadProject(16, 16, 10, palette);
+    // 底板实心 + 四壁 + 敞口
+    for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) p.set(x, z, colorIdx(palette, '#C19A6B'), 0);
+    for (let y = 1; y < 10; y++) {
+      for (let x = 0; x < 16; x++) { p.set(x, 0, colorIdx(palette, '#B96A25'), y); p.set(x, 15, colorIdx(palette, '#B96A25'), y); }
+      for (let z = 0; z < 16; z++) { p.set(0, z, colorIdx(palette, '#B96A25'), y); p.set(15, z, colorIdx(palette, '#B96A25'), y); }
+    }
+  } else if (kind === 'doll') {
+    p = new BeadProject(14, 14, 24, palette);
+    const skin = colorIdx(palette, '#F2C9A0'), cloth = colorIdx(palette, '#DD4B26'), dark = colorIdx(palette, '#4A3226');
+    for (let y = 0; y < 6; y++) for (let x = 4; x < 10; x++) for (let z = 4; z < 10; z++) p.set(x, z, dark, y);       // 腿
+    for (let y = 6; y < 14; y++) for (let x = 3; x < 11; x++) for (let z = 3; z < 11; z++) p.set(x, z, cloth, y);      // 身体
+    for (let y = 14; y < 16; y++) for (let x = 2; x < 12; x++) for (let z = 5; z < 9; z++) p.set(x, z, cloth, y);      // 手臂
+    for (let y = 16; y < 24; y++) {                                                                               // 头（圆形）
+      const r = y < 20 ? 4.2 : 3.2;
+      for (let x = 0; x < 14; x++) for (let z = 0; z < 14; z++) {
+        if (Math.hypot(x - 6.5, z - 6.5) < r) p.set(x, z, skin, y);
+      }
+    }
+  } else if (kind === 'sphere') {
+    p = new BeadProject(21, 21, 21, palette);
+    const c = colorIdx(palette, '#3F7FBF');
+    for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) for (let z = 0; z < 21; z++) {
+      if (Math.hypot(x - 10, y - 10, z - 10) < 9.6) p.set(x, z, c, y);
+    }
+  } else { // name：爱心名牌
+    p = new BeadProject(29, 29, 2, palette);
+    const c = colorIdx(palette, '#D6336C'), bg = colorIdx(palette, '#F5EFE0');
+    for (let x = 0; x < 29; x++) for (let z = 0; z < 29; z++) p.set(x, z, bg, 0);
+    for (let x = 0; x < 29; x++) for (let z = 0; z < 29; z++) {
+      const nx = (x - 14) / 7, nz = (z - 14) / 7;
+      const v = Math.pow(nx * nx + nz * nz - 1, 3) - nx * nx * nz * nz * nz;
+      if (v < 0) { p.set(x, z, c, 0); p.set(x, z, c, 1); }
+    }
+  }
+  return p;
+}
+function colorIdx(palette, hex) {
+  const i = palette.colors.findIndex(c => c.hex.toLowerCase() === hex.toLowerCase());
+  return i >= 0 ? i : 0;
+}
+function clampInt(v, min, max, dft) {
+  const n = parseInt(v);
+  return isNaN(n) ? dft : Math.max(min, Math.min(max, n));
+}
+
+// ---------- 对外 ----------
+export function isEditing() { return state.editing; }
+export function exitEditor() { exitEdit(); }
+export function currentProject() { return state.project; }
+export { syncAll as syncProject };

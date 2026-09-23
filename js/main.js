@@ -10,6 +10,7 @@ import { BeadViewer, initHeroSphere } from './viewer.js';
 import { exportPatternPNG, exportBOMCSV, exportModelJSON, importModelJSON, exportShareCard } from './export.js';
 import { initPathSimulator, initChecklist } from './shooting.js';
 import { askAssistant, saveSettings, assistantStatus, QUICK_QUESTIONS } from './assistant.js';
+import { initPlatform, isEditing, currentProject } from './platform.js';
 
 const $ = (id) => document.getElementById(id);
 const WORK_W = 1024;
@@ -512,6 +513,7 @@ async function build() {
     if (!state.viewer) state.viewer = attachViewer(new BeadViewer($('stageCanvas'), $('stage')));
     state.viewer.setModel(beads, gridN, palette.colors.map(c => c.hex));
     state.viewer.setMode('layer');
+    $('btnEditProject').hidden = false;   // AI 结果可转入编辑器精修
     setStep(5, 'done', `${usage.size} 色`);
     setTimeout(() => state.viewer?.startAutoBuild(), 350);
 
@@ -588,6 +590,7 @@ async function buildFromFrames() {
     if (!state.viewer) state.viewer = attachViewer(new BeadViewer($('stageCanvas'), $('stage')));
     state.viewer.setModel(beads, gridN, palette.colors.map(c => c.hex));
     state.viewer.setMode('layer');
+    $('btnEditProject').hidden = false;
     setStep(1, 'done', '多帧融合'); setStep(2, 'done', `${picks.length} 帧`);
     setStep(3, 'done', `${(total / 1000).toFixed(1)}k 点`); setStep(4, 'done', `${rawBeads.length} 豆`);
     setStep(5, 'done', `${usage.size} 色`);
@@ -685,7 +688,15 @@ function initStageTools() {
     $('btnSound').classList.toggle('active', v.soundOn);
     $('btnSound').textContent = v.soundOn ? '🔈 音效' : '🔇 静音';
   });
-  $('btnReset').addEventListener('click', () => viewer()?.resetView());
+  $('btnReset').addEventListener('click', () => {
+    const v = viewer();
+    if (!v) return;
+    if (v.editView && window.__platform?.currentProject()) {
+      v.setEditView(true, window.__platform.currentProject());  // 编辑模式：回到俯视
+    } else {
+      v.resetView();
+    }
+  });
 
   // 舞台点击 = 放一颗豆（逐颗模式；拖拽旋转后松手不触发）
   let downPos = null;
@@ -951,6 +962,18 @@ window.addEventListener('DOMContentLoaded', () => {
   initStageTools();
   initExports();
   initFirstVisitGuide();
+  // 提前创建 3D 查看器并初始化制作平台（编辑器）
+  if (!state.viewer) state.viewer = attachViewer(new BeadViewer($('stageCanvas'), $('stage')));
+  initPlatform(state.viewer, {
+    state,
+    toast,
+    setStep,
+    updateStatsUI,
+    exportPatternPNG,
+    exportBOMCSV,
+    exportModelJSON,
+    exportShareCard,
+  });
   initAssistant();
   initPathSimulator($('pathCanvas'), $('pathHint'), $('pathBtns'));
   initChecklist($('checkList'), $('checkFill'), $('checkScore'));
@@ -974,6 +997,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // 调试钩子：便于开发期分阶段诊断流水线
   window.__beadorbit = { state, renderSample, estimateDepth, unproject, voxelize, PALETTES, build };
+  window.__platform = { currentProject, isEditing };
 
   // 控制台彩蛋
   console.log('%c BeadOrbit %c 360°立体拼豆工坊 ', 'background:#211b14;color:#f6f0e3;padding:3px 8px;border-radius:6px 0 0 6px', 'background:#dd4b26;color:#fff;padding:3px 8px;border-radius:0 6px 6px 0');

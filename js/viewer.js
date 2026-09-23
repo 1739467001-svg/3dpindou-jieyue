@@ -131,6 +131,11 @@ export class BeadViewer {
         this.ghostRing.scale.set(rp, rp, 1);
         this.ghostRing.material.opacity = 0.4 + Math.sin(now / 180) * 0.2;
       }
+      // 熨烫热光衰减
+      if (this.heatLight && this.heatLight.intensity > 0.05) {
+        this.heatLight.intensity *= 0.94;
+        if (this.heatLight.intensity <= 0.05) this.heatLight.intensity = 0;
+      }
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
     };
@@ -163,6 +168,10 @@ export class BeadViewer {
   }
 
   // ---------- 模型装载 ----------
+  // beads: [{x,y,z,p, fusion?, warn?, dim?}]
+  //   fusion 0..1 熨烫熔合程度（豆子胀大、孔闭合、颜色加深）
+  //   warn   true = 悬空豆（孔染红警示）
+  //   dim    true = 当前层以上的层（变暗聚焦）
   setModel(beads, gridN, paletteHexes) {
     this.clearModel();
     this.beads = beads;      // 必须已按建造顺序排好
@@ -191,13 +200,29 @@ export class BeadViewer {
       const b = beads[i];
       const hex = paletteHexes[b.p] || '#888888';
       color.setStyle(hex);
+      // 熨烫越久颜色越深；聚焦层以上变暗
+      const fusion = b.fusion || 0;
+      if (fusion > 0) color.multiplyScalar(1 - 0.07 * fusion);
+      if (b.dim) color.multiplyScalar(0.42);
       mesh.setColorAt(i, color);
-      m.compose(new THREE.Vector3(b.x - half + 0.5, b.y + 0.5, b.z - half + 0.5), q, one);
+      const s = 1 + fusion * 0.12;
+      m.compose(
+        new THREE.Vector3(b.x - half + 0.5, b.y + 0.5, b.z - half + 0.5),
+        q, new THREE.Vector3(s, s * (1 - fusion * 0.12), s)
+      );
       mesh.setMatrixAt(i, m);
-      m.compose(new THREE.Vector3(b.x - half + 0.5, b.y + 0.52, b.z - half + 0.5), q, one);
+      // 孔：熔合后缩小消失；悬空豆染红
+      const holeColor = b.warn ? new THREE.Color(0xdd4b26) : new THREE.Color(0x14100c);
+      holes.setColorAt(i, holeColor);
+      const hs = fusion > 0.72 ? 0 : 1 - fusion * 0.3;
+      m.compose(
+        new THREE.Vector3(b.x - half + 0.5, b.y + 0.52, b.z - half + 0.5),
+        q, new THREE.Vector3(hs, hs, hs)
+      );
       holes.setMatrixAt(i, m);
     }
-    mesh.instanceColor.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (holes.instanceColor) holes.instanceColor.needsUpdate = true;
     this.beadMesh = mesh;
     this.holeMesh = holes;
     this.modelGroup.add(mesh, holes);
@@ -257,6 +282,108 @@ export class BeadViewer {
     this.placed = 0;
     this.animating = [];
     this.ghost.visible = false;
+  }
+
+  // ---------- 编辑器模式 ----------
+  /** 构建/更新钉板（板 + 钉），位于当前层下方 */
+  buildPegboard(project) {
+    if (this.pegGroup) {
+      this.scene.remove(this.pegGroup);
+      this.pegGroup.traverse(o => { o.geometry?.dispose(); });
+      this.pegGroup = null;
+    }
+    const g = new THREE.Group();
+    const half = project.w / 2, halfD = project.d / 2;
+    const cy = project.current;
+    // 板
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(project.w + 0.6, 0.18, project.d + 0.6),
+      new THREE.MeshLambertMaterial({ color: 0xE8DFC8 })
+    );
+    board.position.set(0, cy - 0.42, 0);
+    g.add(board);
+    // 钉（实例化）
+    const n = project.w * project.d;
+    const pegs = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.1, 0.1, 0.34, 6),
+      new THREE.MeshLambertMaterial({ color: 0xD8CFB8 }),
+      n
+    );
+    const m = new THREE.Matrix4();
+    let i = 0;
+    for (let z = 0; z < project.d; z++) {
+      for (let x = 0; x < project.w; x++) {
+        m.makeTranslation(x - half + 0.5, cy - 0.2, z - halfD + 0.5);
+        pegs.setMatrixAt(i++, m);
+      }
+    }
+    pegs.frustumCulled = false;
+    g.add(pegs);
+    this.pegGroup = g;
+    this.scene.add(g);
+  }
+  hidePegboard() {
+    if (this.pegGroup) {
+      this.scene.remove(this.pegGroup);
+      this.pegGroup.traverse(o => o.geometry?.dispose());
+      this.pegGroup = null;
+    }
+  }
+  /** 进入/退出俯视编辑视角 */
+  setEditView(on, project) {
+    this.editView = on;
+    this.controls.autoRotate = false;
+    if (on && project) {
+      this.buildPegboard(project);
+      const cy = project.current;
+      const dist = Math.max(project.w, project.d) * 0.95;
+      this.camera.position.set(0.001, cy + dist, 0.001);
+      this.controls.target.set(0, cy, 0);
+      this.controls.maxPolarAngle = Math.PI * 0.44;   // 限制在板上方，可小幅倾斜看 3D
+      this.controls.minDistance = 4;
+      this.controls.maxDistance = dist * 2.2;
+    } else {
+      this.hidePegboard();
+      this.controls.maxPolarAngle = Math.PI * 0.96;
+      this.controls.minDistance = 1.2;
+      this.controls.maxDistance = 40;
+    }
+    this.controls.update();
+  }
+  /** 从工程同步 3D 模型（保留相机与建造进度） */
+  syncProject(project, opts = {}) {
+    const beads = [];
+    const hexes = project.palette.colors.map(c => c.hex);
+    for (let y = 0; y < project.h; y++) {
+      const l = project.layers[y];
+      const below = y > 0 ? project.layers[y - 1] : null;
+      for (let z = 0; z < project.d; z++) {
+        for (let x = 0; x < project.w; x++) {
+          const v = l[z * project.w + x];
+          if (v <= 0) continue;
+          beads.push({
+            x, y, z, p: v - 1,
+            fusion: (project.iron[y] || 0) / 3,
+            warn: below ? below[z * project.w + x] === 0 : false,
+            dim: y > project.current,
+          });
+        }
+      }
+    }
+    // 建造顺序：按层从底向上
+    beads.sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x);
+    const gridN = Math.max(project.w, project.d, project.h);
+    const keepPlaced = this.total > 0 && this.beads.length > 0 && opts.keepProgress;
+    const placedBefore = this.placed;
+    this.setModel(beads, gridN, hexes);
+    if (keepPlaced) {
+      this.placed = Math.min(placedBefore, this.total);
+      this._applyCount();
+    } else {
+      this.placed = this.total;   // 编辑模式：全部可见
+      this._applyCount();
+    }
+    this.onProgress?.(this.placed, this.total);
   }
 
   // ---------- 模式与进度 ----------
@@ -390,6 +517,16 @@ export class BeadViewer {
       osc.start(t);
       osc.stop(t + 0.12);
     } catch (e) { /* 忽略音频错误 */ }
+  }
+
+  // 熨烫热光：在指定层位置来一盏暖色点光源，1.2 秒内衰减
+  heatPulse(y) {
+    if (!this.heatLight) {
+      this.heatLight = new THREE.PointLight(0xff7a33, 0, 60, 1.6);
+      this.scene.add(this.heatLight);
+    }
+    this.heatLight.position.set(0, y + 1.2, 0);
+    this.heatLight.intensity = 26;
   }
 
   dispose() {

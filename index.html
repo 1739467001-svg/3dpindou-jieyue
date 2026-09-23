@@ -118,113 +118,209 @@
   </ol>
 
   <div class="studio-grid">
-    <!-- 左：素材 -->
+    <!-- 左：创作面板 -->
     <aside class="panel panel-source">
-      <h3 class="panel-title">① 选择素材</h3>
-      <div class="source-tabs" id="sourceTabs">
-        <button class="src-tab active" data-src="image">全景图片</button>
-        <button class="src-tab" data-src="video">360 视频</button>
-        <button class="src-tab" data-src="sample">示例场景</button>
-        <button class="src-tab" data-src="text">文字生成</button>
+      <h3 class="panel-title">① 选择创作方式</h3>
+      <div class="source-tabs" id="modeTabs">
+        <button class="src-tab active" data-mode="ai">✨ AI 造物</button>
+        <button class="src-tab" data-mode="new">✏️ 新建空白</button>
       </div>
 
-      <div class="src-pane active" data-pane="image">
-        <label class="dropzone" id="dropImage">
-          <input type="file" id="fileImage" accept="image/*" hidden>
-          <span class="dz-icon">⬆</span>
-          <span class="dz-main">拖入 / 点击上传全景图</span>
-          <span class="dz-sub">ERP 等距柱状投影 JPG/PNG<br>（影石 App 或 Studio 导出的全景图）</span>
-        </label>
-        <p class="hint">💡 没有全景图？随便一张照片也可以——AI 会把它当作 360° 画面来处理。</p>
-      </div>
-
-      <div class="src-pane" data-pane="video">
-        <label class="dropzone" id="dropVideo">
-          <input type="file" id="fileVideo" accept="video/*" hidden>
-          <span class="dz-icon">⬆</span>
-          <span class="dz-main">上传 360 视频（ERP MP4）</span>
-          <span class="dz-sub">从视频中自动抽取 8 个关键帧，<br>可逐帧对比后选用或融合</span>
-        </label>
-        <div class="frame-strip" id="frameStrip" hidden>
-          <p class="hint">拖动选择一帧，或点「融合全部」：</p>
-          <div class="frame-list" id="frameList"></div>
-          <button class="btn btn-mini" id="btnFuseAll">融合全部帧</button>
+      <!-- AI 造物 -->
+      <div id="aiPanel">
+        <div class="source-tabs" id="sourceTabs">
+          <button class="src-tab active" data-src="image">全景图片</button>
+          <button class="src-tab" data-src="video">360 视频</button>
+          <button class="src-tab" data-src="sample">示例场景</button>
+          <button class="src-tab" data-src="text">文字生成</button>
         </div>
-        <p class="hint">💡 .insv 是未拼接的双鱼眼格式，请先用影石 App / Insta360 Studio 导出为全景 MP4 或 JPG（详见下方拍摄指南）。</p>
+
+        <div class="src-pane active" data-pane="image">
+          <label class="dropzone" id="dropImage">
+            <input type="file" id="fileImage" accept="image/*" hidden>
+            <span class="dz-icon">⬆</span>
+            <span class="dz-main">拖入 / 点击上传全景图</span>
+            <span class="dz-sub">ERP 等距柱状投影 JPG/PNG<br>（影石 App 或 Studio 导出的全景图）</span>
+          </label>
+          <p class="hint">💡 没有全景图？随便一张照片也可以——AI 会把它当作 360° 画面来处理。</p>
+        </div>
+
+        <div class="src-pane" data-pane="video">
+          <label class="dropzone" id="dropVideo">
+            <input type="file" id="fileVideo" accept="video/*" hidden>
+            <span class="dz-icon">⬆</span>
+            <span class="dz-main">上传 360 视频（ERP MP4）</span>
+            <span class="dz-sub">从视频中自动抽取 8 个关键帧，<br>可逐帧对比后选用或融合</span>
+          </label>
+          <div class="frame-strip" id="frameStrip" hidden>
+            <p class="hint">拖动选择一帧，或点「融合全部」：</p>
+            <div class="frame-list" id="frameList"></div>
+            <button class="btn btn-mini" id="btnFuseAll">融合全部帧</button>
+          </div>
+          <p class="hint">💡 .insv 是未拼接的双鱼眼格式，请先用影石 App / Insta360 Studio 导出为全景 MP4 或 JPG（详见下方拍摄指南）。</p>
+        </div>
+
+        <div class="src-pane" data-pane="sample">
+          <p class="hint">没有素材？用内置程序化全景场景立即体验完整流程（等效于一次真实拍摄）：</p>
+          <div class="sample-grid" id="sampleGrid">
+            <button class="sample-card" data-sample="mushroom"><span class="sample-emoji">🍄</span>蘑菇小屋</button>
+            <button class="sample-card" data-sample="robot"><span class="sample-emoji">🤖</span>巡逻机器人</button>
+            <button class="sample-card" data-sample="castle"><span class="sample-emoji">🏰</span>小城堡</button>
+            <button class="sample-card" data-sample="forest"><span class="sample-emoji">🌲</span>晨雾森林</button>
+            <button class="sample-card" data-sample="planet"><span class="sample-emoji">🪐</span>环形星球</button>
+            <button class="sample-card" data-sample="teapot"><span class="sample-emoji">🫖</span>茶壶花园</button>
+          </div>
+        </div>
+
+        <div class="src-pane" data-pane="text">
+          <p class="hint">输入一句描述，生成一张 360° 全景图进入流程（DiT360「文字→全景」理念的离线实现）：</p>
+          <div class="text-gen">
+            <input type="text" id="textPrompt" placeholder="例如：一座云雾中的城堡" value="一座云雾中的城堡">
+            <button class="btn btn-mini" id="btnTextGen">生成全景</button>
+          </div>
+          <div class="prompt-chips" id="promptChips">
+            <button class="chip">蘑菇小屋</button><button class="chip">机器人</button>
+            <button class="chip">城堡</button><button class="chip">森林</button>
+            <button class="chip">星球</button><button class="chip">茶壶</button>
+          </div>
+        </div>
+
+        <div class="panel-divider"></div>
+
+        <h3 class="panel-title">② 调整参数</h3>
+        <div class="param">
+          <label>拼豆色板 <span class="param-val" id="valPalette">BeadOrbit 72色</span></label>
+          <select id="selPalette">
+            <option value="orbit72">BeadOrbit 72 色（默认）</option>
+            <option value="mini24">精简 24 色（省豆易拼）</option>
+          </select>
+          <button class="btn btn-mini btn-wide" id="btnImportPalette">导入官方色板 CSV</button>
+        </div>
+        <div class="param">
+          <label>豆子规格 <span class="param-val" id="valBead">2.6mm 迷你豆</span></label>
+          <select id="selBead">
+            <option value="2.6">2.6mm 迷你豆（国内主流）</option>
+            <option value="5">5mm 标准豆（亲子入门）</option>
+          </select>
+        </div>
+        <div class="param">
+          <label>体素精度 <span class="param-val" id="valGrid">48 × 48 × 48</span></label>
+          <input type="range" id="rngGrid" min="24" max="72" step="8" value="48">
+          <p class="param-hint">精度越高越细腻，豆子也越多</p>
+        </div>
+        <div class="param">
+          <label>主体深度 <span class="param-val" id="valNear">0.45</span></label>
+          <input type="range" id="rngNear" min="0.15" max="0.85" step="0.01" value="0.45">
+          <p class="param-hint">AI 判定为「近」的位置对应的半径</p>
+        </div>
+        <div class="param">
+          <label>背景剔除 <span class="param-val" id="valCut">0.30</span></label>
+          <input type="range" id="rngCut" min="0" max="0.7" step="0.01" value="0.30">
+          <p class="param-hint">去掉天空/远处背景，只保留主体</p>
+        </div>
+        <div class="param">
+          <label>底座保留 <span class="param-val" id="valBase">52°</span></label>
+          <input type="range" id="rngBase" min="0" max="80" step="1" value="52">
+          <p class="param-hint">地面变成圆形底座的角度，0 = 只要主体</p>
+        </div>
+
+        <button class="btn btn-primary btn-build" id="btnBuild">✦ 开始拼豆</button>
+        <button class="btn btn-build" id="btnAutoTune">✨ AI 自动调参后拼豆</button>
+        <p class="param-hint" style="text-align:center">自动调参会分析深度直方图，推荐「背景剔除」与「主体深度」</p>
       </div>
 
-      <div class="src-pane" data-pane="sample">
-        <p class="hint">没有素材？用内置程序化全景场景立即体验完整流程（等效于一次真实拍摄）：</p>
-        <div class="sample-grid" id="sampleGrid">
-          <button class="sample-card" data-sample="mushroom"><span class="sample-emoji">🍄</span>蘑菇小屋</button>
-          <button class="sample-card" data-sample="robot"><span class="sample-emoji">🤖</span>巡逻机器人</button>
-          <button class="sample-card" data-sample="castle"><span class="sample-emoji">🏰</span>小城堡</button>
-          <button class="sample-card" data-sample="forest"><span class="sample-emoji">🌲</span>晨雾森林</button>
-          <button class="sample-card" data-sample="planet"><span class="sample-emoji">🪐</span>环形星球</button>
-          <button class="sample-card" data-sample="teapot"><span class="sample-emoji">🫖</span>茶壶花园</button>
+      <!-- 新建空白作品 -->
+      <div id="newProjectPanel" hidden>
+        <p class="hint" style="margin-bottom:12px">像在真实钉板上一样，从空白开始一层层创作。也可以先用 AI 生成雏形，再进来精修。</p>
+        <div class="param">
+          <label>作品名称</label>
+          <input type="text" id="inpProjName" class="text-input" value="我的立体拼豆" maxlength="20">
+        </div>
+        <div class="param">
+          <label>尺寸（格）= 宽 × 深 × 层数</label>
+          <div class="size-row">
+            <input type="number" id="inpW" value="29" min="4" max="120">
+            <span>×</span>
+            <input type="number" id="inpD" value="29" min="4" max="120">
+            <span>×</span>
+            <input type="number" id="inpH" value="8" min="1" max="80">
+          </div>
+          <p class="param-hint">29×29 = 一块标准钉板；层数即作品高度</p>
+        </div>
+        <div class="param">
+          <label>拼豆色板 <span class="param-val" id="valBrand">MARD 291</span></label>
+          <select id="selBrand"></select>
+          <p class="param-hint">真实品牌色号（1,406 色，bitbead 开源数据集）——材料清单直接照单买豆</p>
+        </div>
+        <button class="btn btn-primary btn-build" id="btnCreateProject">✏️ 创建空白作品</button>
+        <div class="panel-divider"></div>
+        <h3 class="panel-title">快速模板</h3>
+        <div class="sample-grid">
+          <button class="sample-card" data-tpl="box"><span class="sample-emoji">📦</span>收纳盒 16×16×10</button>
+          <button class="sample-card" data-tpl="doll"><span class="sample-emoji">🧸</span>小人偶 14×14×24</button>
+          <button class="sample-card" data-tpl="sphere"><span class="sample-emoji">🔮</span>球体 21×21×21</button>
+          <button class="sample-card" data-tpl="name"><span class="sample-emoji">🔤</span>名字牌 29×29×2</button>
         </div>
       </div>
 
-      <div class="src-pane" data-pane="text">
-        <p class="hint">输入一句描述，生成一张 360° 全景图进入流程（DiT360「文字→全景」理念的离线实现）：</p>
-        <div class="text-gen">
-          <input type="text" id="textPrompt" placeholder="例如：一座云雾中的城堡" value="一座云雾中的城堡">
-          <button class="btn btn-mini" id="btnTextGen">生成全景</button>
+      <!-- 熨烫模拟（编辑模式显示） -->
+      <div id="ironPanel" hidden>
+        <div class="panel-divider"></div>
+        <h3 class="panel-title">⑤ 熨烫模拟 <span class="param-val" id="valIronLevel">未熨烫</span></h3>
+        <div class="param">
+          <label>温度 <span class="param-val" id="valTemp">160°C</span></label>
+          <input type="range" id="rngTemp" min="100" max="200" step="5" value="160">
         </div>
-        <div class="prompt-chips" id="promptChips">
-          <button class="chip">蘑菇小屋</button><button class="chip">机器人</button>
-          <button class="chip">城堡</button><button class="chip">森林</button>
-          <button class="chip">星球</button><button class="chip">茶壶</button>
+        <div class="param">
+          <label>每面时间 <span class="param-val" id="valSec">15 秒</span></label>
+          <input type="range" id="rngSec" min="0" max="40" step="1" value="15">
         </div>
+        <div class="param">
+          <label>熨烫面</label>
+          <select id="selSides">
+            <option value="1">单面（快，易翘曲）</option>
+            <option value="2" selected>双面（推荐）</option>
+          </select>
+        </div>
+        <div class="iron-live" id="ironLive"></div>
+        <button class="btn btn-mini btn-wide" id="btnIronLayer">🔥 熨烫当前层</button>
+        <button class="btn btn-mini btn-wide" id="btnIronAll">🔥 熨烫全部层</button>
+        <button class="btn btn-mini btn-wide" id="btnUniron">❄️ 重置熨烫状态</button>
       </div>
-
-      <div class="panel-divider"></div>
-
-      <h3 class="panel-title">② 调整参数</h3>
-      <div class="param">
-        <label>拼豆色板 <span class="param-val" id="valPalette">BeadOrbit 72色</span></label>
-        <select id="selPalette">
-          <option value="orbit72">BeadOrbit 72 色（默认）</option>
-          <option value="mard48">MARD 常用 48 色（近似）</option>
-          <option value="mini24">精简 24 色（省豆易拼）</option>
-        </select>
-        <button class="btn btn-mini btn-wide" id="btnImportPalette">导入官方色板 CSV</button>
-      </div>
-      <div class="param">
-        <label>豆子规格 <span class="param-val" id="valBead">2.6mm 迷你豆</span></label>
-        <select id="selBead">
-          <option value="2.6">2.6mm 迷你豆（国内主流）</option>
-          <option value="5">5mm 标准豆（亲子入门）</option>
-        </select>
-      </div>
-      <div class="param">
-        <label>体素精度 <span class="param-val" id="valGrid">48 × 48 × 48</span></label>
-        <input type="range" id="rngGrid" min="24" max="72" step="8" value="48">
-        <p class="param-hint">精度越高越细腻，豆子也越多</p>
-      </div>
-      <div class="param">
-        <label>主体深度 <span class="param-val" id="valNear">0.45</span></label>
-        <input type="range" id="rngNear" min="0.15" max="0.85" step="0.01" value="0.45">
-        <p class="param-hint">AI 判定为「近」的位置对应的半径</p>
-      </div>
-      <div class="param">
-        <label>背景剔除 <span class="param-val" id="valCut">0.30</span></label>
-        <input type="range" id="rngCut" min="0" max="0.7" step="0.01" value="0.30">
-        <p class="param-hint">去掉天空/远处背景，只保留主体</p>
-      </div>
-      <div class="param">
-        <label>底座保留 <span class="param-val" id="valBase">52°</span></label>
-        <input type="range" id="rngBase" min="0" max="80" step="1" value="52">
-        <p class="param-hint">地面变成圆形底座的角度，0 = 只要主体</p>
-      </div>
-
-      <button class="btn btn-primary btn-build" id="btnBuild">✦ 开始拼豆</button>
-      <button class="btn btn-build" id="btnAutoTune">✨ AI 自动调参后拼豆</button>
-      <p class="param-hint" style="text-align:center">自动调参会分析深度直方图，推荐「背景剔除」与「主体深度」</p>
     </aside>
 
-    <!-- 中：3D 舞台 -->
+    <!-- 中：舞台 -->
     <div class="stage-wrap">
+      <!-- 编辑器工具栏 -->
+      <div class="editor-toolbar" id="editorToolbar" hidden>
+        <div class="tool-group">
+          <button class="etool active" data-tool="brush" title="笔刷">✏️</button>
+          <button class="etool" data-tool="eraser" title="橡皮">🧽</button>
+          <button class="etool" data-tool="fill" title="油漆桶">🪣</button>
+          <button class="etool" data-tool="pick" title="取色器">💧</button>
+          <button class="etool" data-tool="recolor" title="换色（整层同色替换）">🎨</button>
+          <button class="etool" data-tool="line" title="直线">📏</button>
+          <button class="etool" data-tool="rect" title="矩形（按住 Shift 填充）">⬜</button>
+        </div>
+        <div class="tool-group">
+          <button class="etool" id="btnMirrorX" title="左右镜像">⇋</button>
+          <button class="etool" id="btnMirrorZ" title="前后镜像">⇅</button>
+          <button class="etool" id="btnRadial" title="径向对称（花朵/雪花）">✳️</button>
+        </div>
+        <div class="tool-group">
+          <button class="etool" id="btnUndo" title="撤销">↩️</button>
+          <button class="etool" id="btnRedo" title="重做">↪️</button>
+        </div>
+        <div class="tool-group brush-group">
+          <span class="brush-label">笔刷</span>
+          <input type="range" id="rngBrush" min="0" max="4" step="1" value="0">
+          <span class="param-val" id="valBrush">1×1</span>
+        </div>
+        <div class="tool-group">
+          <button class="etool" id="btnCodes" title="显示色号">🔤</button>
+        </div>
+      </div>
+
       <div class="stage" id="stage">
         <canvas id="stageCanvas"></canvas>
         <div class="stage-overlay" id="stageOverlay">
@@ -259,10 +355,34 @@
           <p id="loadingText">AI 正在估计深度…</p>
         </div>
       </div>
-      <p class="stage-tip">🖱 拖动旋转 · 滚轮缩放 · 右键平移。逐颗模式下，点击发光的那颗豆子把它拼上去。</p>
+
+      <!-- 2D 钉板编辑画布（编辑模式显示） -->
+      <div class="board-wrap" id="boardWrap" hidden>
+        <div class="layer-strip">
+          <button class="etool" id="btnLayerPrev" title="上一层">◀</button>
+          <span class="layer-label">第 <b id="layerCur">1</b> / <b id="layerTotal">8</b> 层</span>
+          <button class="etool" id="btnLayerNext" title="下一层">▶</button>
+          <span class="layer-sep"></span>
+          <button class="etool" id="btnAddLayer" title="新增层">＋</button>
+          <button class="etool" id="btnDupLayer" title="复制当前层">⧉</button>
+          <button class="etool" id="btnDelLayer" title="删除当前层">🗑</button>
+          <button class="etool" id="btnClearLayer" title="清空当前层">🧹</button>
+          <span class="layer-sep"></span>
+          <button class="etool" id="btnIronBadge" title="当前层熨烫状态">🔥</button>
+        </div>
+        <canvas id="boardCanvas"></canvas>
+        <div class="palette-picker">
+          <div class="pal-current">
+            <i id="palCurrentChip"></i>
+            <span id="palCurrentCode">—</span>
+          </div>
+          <div class="pal-grid" id="palGrid"></div>
+        </div>
+      </div>
+      <p class="stage-tip" id="stageTip">🖱 拖动旋转 · 滚轮缩放 · 右键平移。逐颗模式下，点击发光的那颗豆子把它拼上去。</p>
     </div>
 
-    <!-- 右：统计与导出 -->
+    <!-- 右：作品档案 -->
     <aside class="panel panel-stats">
       <h3 class="panel-title">③ 作品档案</h3>
       <div class="stat-cards" id="statCards">
@@ -271,6 +391,7 @@
         <div class="stat"><span class="stat-num" id="statLayers">—</span><span class="stat-name">层数</span></div>
         <div class="stat"><span class="stat-num" id="statSize">—</span><span class="stat-name">成品尺寸</span></div>
       </div>
+      <div class="warn-box" id="warnBox" hidden></div>
       <div class="palette-strip" id="paletteStrip" title="本作品用到的拼豆色板"></div>
       <div class="bom-preview" id="bomPreview">
         <p class="hint">材料清单会出现在这里——每种色号需要多少颗豆。</p>
@@ -278,6 +399,7 @@
       <div class="panel-divider"></div>
       <h3 class="panel-title">④ 导出带走</h3>
       <div class="export-btns">
+        <button class="btn btn-mini btn-wide" id="btnEditProject" hidden>✏️ 进入编辑器精修</button>
         <button class="btn btn-mini btn-wide" id="btnExportPng" disabled>🖼 分层图纸 PNG（带色号）</button>
         <button class="btn btn-mini btn-wide" id="btnExportCsv" disabled>📋 材料清单 CSV</button>
         <button class="btn btn-mini btn-wide" id="btnExportJson" disabled>💾 作品文件 JSON</button>
