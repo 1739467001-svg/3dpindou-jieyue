@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "onnxruntime-node": "^1.30.0",
+    "onnxruntime-web": "^1.30.0",
+    "pptxgenjs": "^4.0.1",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

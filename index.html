@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeadOrbit · 360°立体拼豆工坊 — 把全景世界拼成一颗颗豆子</title>
+<meta name="description" content="用影石全景相机拍下任何事物，AI 在浏览器里把它变成可以 360° 旋转、逐颗拼装的立体拼豆作品。2026 影石 Insta360 Bold Maker 智能影像挑战赛参赛作品。">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="paper-grain" aria-hidden="true"></div>
+
+<!-- ==================== 导航 ==================== -->
+<header class="site-nav" id="siteNav">
+  <a class="nav-logo" href="#hero">
+    <span class="logo-beads" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="logo-text">BeadOrbit<em>360°立体拼豆工坊</em></span>
+  </a>
+  <nav class="nav-links">
+    <a href="#why">为什么</a>
+    <a href="#studio">拼豆工坊</a>
+    <a href="#shooting">拍摄指南</a>
+    <a href="#ai">AI 能力</a>
+    <a href="#tech">技术&amp;赛题</a>
+  </nav>
+  <a class="nav-cta" href="#studio">开始拼豆 →</a>
+</header>
+
+<main>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero" id="hero">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <p class="hero-badge"><span class="badge-dot"></span>2026 影石 Insta360 Bold Maker 智能影像挑战赛 · AI+影像产品开发赛道</p>
+      <h1 class="hero-title">把世界，<br>拼成<em>一颗颗豆子</em>。</h1>
+      <p class="hero-sub">用影石全景相机拍下任何事物，AI 在你的浏览器里把它变成可以 <strong>360° 旋转、逐颗拼装</strong>的立体拼豆作品。从「怎么看」到「怎么拼」——每一颗豆子都有位置，每一层都有图纸。</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#studio">进入拼豆工坊</a>
+        <a class="btn btn-ghost" href="#shooting">先学怎么拍</a>
+      </div>
+      <dl class="hero-stats">
+        <div><dt>70亿+</dt><dd>小红书拼豆话题浏览量</dd></div>
+        <div><dt>+9018%</dt><dd>抖音拼豆订单年增长</dd></div>
+        <div><dt>0 个</dt><dd>支持 3D 图纸的现有工具</dd></div>
+        <div><dt>100%</dt><dd>浏览器本地 AI 运算</dd></div>
+      </dl>
+    </div>
+    <div class="hero-stage" id="heroStage">
+      <canvas id="heroCanvas"></canvas>
+      <p class="hero-stage-caption">↑ 一颗正在自转的「拼豆球」——你的作品也会这样旋转</p>
+    </div>
+  </div>
+  <div class="hero-ticker" aria-hidden="true">
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+</section>
+
+<!-- ==================== 为什么 ==================== -->
+<section class="why" id="why">
+  <div class="section-head">
+    <p class="section-kicker">STEP 00 · 调研发现</p>
+    <h2 class="section-title">拼豆很火，<em>但图纸停在平面</em></h2>
+    <p class="section-desc">我们调研了国内外主流拼豆工具与社区，发现一个被所有竞品跳过的空白：立体。</p>
+  </div>
+  <div class="why-grid">
+    <article class="why-card">
+      <span class="why-num">01</span>
+      <h3>市场很热，工具很旧</h3>
+      <p>拼豆是 Z 世代的「新解压」：小红书话题浏览 70 亿+，抖音春节订单同比 +9018%，TikTok 单 SKU 月销 42.6 万件。但图纸生成器仍停留在「图片转平面网格」。</p>
+    </article>
+    <article class="why-card">
+      <span class="why-num">02</span>
+      <h3>立体拼豆 = 纯手工地狱</h3>
+      <p>想拼立体作品（盒子、玩偶、场景）的人，只能靠 MagicaVoxel 手工建模、逐层截图、手动画图纸——一个 6 面板小房子要 4–6 小时画图，还没开始拼。</p>
+    </article>
+    <article class="why-card">
+      <span class="why-num">03</span>
+      <h3>全景素材正在沉睡</h3>
+      <p>影石用户拍了几百 TB 的 360° 素材，剪完视频就躺在硬盘里。相机能「看」整个世界，却没有工具让这个世界以另一种形态被把玩。</p>
+    </article>
+    <article class="why-card why-answer">
+      <span class="why-num">✚</span>
+      <h3>BeadOrbit 的答案</h3>
+      <p>一张 360° 全景图 → <b>AI 深度估计</b>（影石 DAP 同款流程）→ 球面反投影成点云 → <b>体素化</b> → 匹配拼豆色板，直接产出：可 360° 旋转的 3D 模型、逐层施工图纸、材料清单 BOM。</p>
+    </article>
+  </div>
+</section>
+
+<!-- ==================== 工坊 STUDIO ==================== -->
+<section class="studio" id="studio">
+  <div class="section-head section-head-light">
+    <p class="section-kicker">STEP 01–05 · 核心工坊</p>
+    <h2 class="section-title">拼豆工坊 <em>Bead Studio</em></h2>
+    <p class="section-desc">选一个素材，剩下的交给 AI。全流程在浏览器本地完成，照片不会上传到任何服务器。</p>
+  </div>
+
+  <!-- 流水线进度 -->
+  <ol class="pipeline" id="pipeline">
+    <li class="pipe-step" data-step="1"><span class="pipe-dot"></span><span class="pipe-label">全景素材</span><span class="pipe-meta"></span></li>
+    <li class="pipe-step" data-step="2"><span class="pipe-dot"></span><span class="pipe-label">AI 深度估计</span><span class="pipe-meta"></span></li>
+    <li class="pipe-step" data-step="3"><span class="pipe-dot"></span><span class="pipe-label">球面反投影</span><span class="pipe-meta"></span></li>
+    <li class="pipe-step" data-step="4"><span class="pipe-dot"></span><span class="pipe-label">体素化降噪</span><span class="pipe-meta"></span></li>
+    <li class="pipe-step" data-step="5"><span class="pipe-dot"></span><span class="pipe-label">拼豆量化</span><span class="pipe-meta"></span></li>
+  </ol>
+
+  <div class="studio-grid">
+    <!-- 左：素材 -->
+    <aside class="panel panel-source">
+      <h3 class="panel-title">① 选择素材</h3>
+      <div class="source-tabs" id="sourceTabs">
+        <button class="src-tab active" data-src="image">全景图片</button>
+        <button class="src-tab" data-src="video">360 视频</button>
+        <button class="src-tab" data-src="sample">示例场景</button>
+        <button class="src-tab" data-src="text">文字生成</button>
+      </div>
+
+      <div class="src-pane active" data-pane="image">
+        <label class="dropzone" id="dropImage">
+          <input type="file" id="fileImage" accept="image/*" hidden>
+          <span class="dz-icon">⬆</span>
+          <span class="dz-main">拖入 / 点击上传全景图</span>
+          <span class="dz-sub">ERP 等距柱状投影 JPG/PNG<br>（影石 App 或 Studio 导出的全景图）</span>
+        </label>
+        <p class="hint">💡 没有全景图？随便一张照片也可以——AI 会把它当作 360° 画面来处理。</p>
+      </div>
+
+      <div class="src-pane" data-pane="video">
+        <label class="dropzone" id="dropVideo">
+          <input type="file" id="fileVideo" accept="video/*" hidden>
+          <span class="dz-icon">⬆</span>
+          <span class="dz-main">上传 360 视频（ERP MP4）</span>
+          <span class="dz-sub">从视频中自动抽取 8 个关键帧，<br>可逐帧对比后选用或融合</span>
+        </label>
+        <div class="frame-strip" id="frameStrip" hidden>
+          <p class="hint">拖动选择一帧，或点「融合全部」：</p>
+          <div class="frame-list" id="frameList"></div>
+          <button class="btn btn-mini" id="btnFuseAll">融合全部帧</button>
+        </div>
+        <p class="hint">💡 .insv 是未拼接的双鱼眼格式，请先用影石 App / Insta360 Studio 导出为全景 MP4 或 JPG（详见下方拍摄指南）。</p>
+      </div>
+
+      <div class="src-pane" data-pane="sample">
+        <p class="hint">没有素材？用内置程序化全景场景立即体验完整流程（等效于一次真实拍摄）：</p>
+        <div class="sample-grid" id="sampleGrid">
+          <button class="sample-card" data-sample="mushroom"><span class="sample-emoji">🍄</span>蘑菇小屋</button>
+          <button class="sample-card" data-sample="robot"><span class="sample-emoji">🤖</span>巡逻机器人</button>
+          <button class="sample-card" data-sample="castle"><span class="sample-emoji">🏰</span>小城堡</button>
+          <button class="sample-card" data-sample="forest"><span class="sample-emoji">🌲</span>晨雾森林</button>
+          <button class="sample-card" data-sample="planet"><span class="sample-emoji">🪐</span>环形星球</button>
+          <button class="sample-card" data-sample="teapot"><span class="sample-emoji">🫖</span>茶壶花园</button>
+        </div>
+      </div>
+
+      <div class="src-pane" data-pane="text">
+        <p class="hint">输入一句描述，生成一张 360° 全景图进入流程（DiT360「文字→全景」理念的离线实现）：</p>
+        <div class="text-gen">
+          <input type="text" id="textPrompt" placeholder="例如：一座云雾中的城堡" value="一座云雾中的城堡">
+          <button class="btn btn-mini" id="btnTextGen">生成全景</button>
+        </div>
+        <div class="prompt-chips" id="promptChips">
+          <button class="chip">蘑菇小屋</button><button class="chip">机器人</button>
+          <button class="chip">城堡</button><button class="chip">森林</button>
+          <button class="chip">星球</button><button class="chip">茶壶</button>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <h3 class="panel-title">② 调整参数</h3>
+      <div class="param">
+        <label>拼豆色板 <span class="param-val" id="valPalette">BeadOrbit 72色</span></label>
+        <select id="selPalette">
+          <option value="orbit72">BeadOrbit 72 色（默认）</option>
+          <option value="mard48">MARD 常用 48 色（近似）</option>
+          <option value="mini24">精简 24 色（省豆易拼）</option>
+        </select>
+        <button class="btn btn-mini btn-wide" id="btnImportPalette">导入官方色板 CSV</button>
+      </div>
+      <div class="param">
+        <label>豆子规格 <span class="param-val" id="valBead">2.6mm 迷你豆</span></label>
+        <select id="selBead">
+          <option value="2.6">2.6mm 迷你豆（国内主流）</option>
+          <option value="5">5mm 标准豆（亲子入门）</option>
+        </select>
+      </div>
+      <div class="param">
+        <label>体素精度 <span class="param-val" id="valGrid">48 × 48 × 48</span></label>
+        <input type="range" id="rngGrid" min="24" max="72" step="8" value="48">
+        <p class="param-hint">精度越高越细腻，豆子也越多</p>
+      </div>
+      <div class="param">
+        <label>主体深度 <span class="param-val" id="valNear">0.45</span></label>
+        <input type="range" id="rngNear" min="0.15" max="0.85" step="0.01" value="0.45">
+        <p class="param-hint">AI 判定为「近」的位置对应的半径</p>
+      </div>
+      <div class="param">
+        <label>背景剔除 <span class="param-val" id="valCut">0.30</span></label>
+        <input type="range" id="rngCut" min="0" max="0.7" step="0.01" value="0.30">
+        <p class="param-hint">去掉天空/远处背景，只保留主体</p>
+      </div>
+      <div class="param">
+        <label>底座保留 <span class="param-val" id="valBase">52°</span></label>
+        <input type="range" id="rngBase" min="0" max="80" step="1" value="52">
+        <p class="param-hint">地面变成圆形底座的角度，0 = 只要主体</p>
+      </div>
+
+      <button class="btn btn-primary btn-build" id="btnBuild">✦ 开始拼豆</button>
+      <button class="btn btn-build" id="btnAutoTune">✨ AI 自动调参后拼豆</button>
+      <p class="param-hint" style="text-align:center">自动调参会分析深度直方图，推荐「背景剔除」与「主体深度」</p>
+    </aside>
+
+    <!-- 中：3D 舞台 -->
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+        <canvas id="stageCanvas"></canvas>
+        <div class="stage-overlay" id="stageOverlay">
+          <div class="stage-empty">
+            <span class="empty-beads" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <p>舞台空荡荡的</p>
+            <p class="stage-empty-sub">选一个素材，点「开始拼豆」<br>或先试试 <button class="link-btn" id="btnQuickSample">示例场景 →</button></p>
+          </div>
+        </div>
+        <div class="stage-tools" id="stageTools" hidden>
+          <div class="tool-group" role="group" aria-label="观看模式">
+            <button class="tool active" data-mode="orbit" title="自由观察">👁 观察</button>
+            <button class="tool" data-mode="layer" title="逐层建造">🧱 逐层</button>
+            <button class="tool" data-mode="bead" title="逐颗拼装">✋ 逐颗</button>
+          </div>
+          <div class="tool-group">
+            <button class="tool" id="btnSpin" title="自动旋转">🌀 自转</button>
+            <button class="tool" id="btnSound" title="落豆音效">🔈 音效</button>
+            <button class="tool" id="btnReset" title="复位视角">⌂ 复位</button>
+          </div>
+        </div>
+        <div class="stage-hud" id="stageHud" hidden>
+          <div class="hud-row">
+            <span class="hud-label" id="hudMode">观察模式</span>
+            <span class="hud-count" id="hudCount">0 / 0 颗</span>
+          </div>
+          <div class="hud-bar"><div class="hud-bar-fill" id="hudBarFill"></div></div>
+          <input type="range" class="hud-slider" id="layerSlider" min="0" max="100" value="100" title="建造进度">
+        </div>
+        <div class="stage-loading" id="stageLoading" hidden>
+          <div class="loader-beads"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <p id="loadingText">AI 正在估计深度…</p>
+        </div>
+      </div>
+      <p class="stage-tip">🖱 拖动旋转 · 滚轮缩放 · 右键平移。逐颗模式下，点击发光的那颗豆子把它拼上去。</p>
+    </div>
+
+    <!-- 右：统计与导出 -->
+    <aside class="panel panel-stats">
+      <h3 class="panel-title">③ 作品档案</h3>
+      <div class="stat-cards" id="statCards">
+        <div class="stat"><span class="stat-num" id="statBeads">—</span><span class="stat-name">豆子总数</span></div>
+        <div class="stat"><span class="stat-num" id="statColors">—</span><span class="stat-name">用到颜色</span></div>
+        <div class="stat"><span class="stat-num" id="statLayers">—</span><span class="stat-name">层数</span></div>
+        <div class="stat"><span class="stat-num" id="statSize">—</span><span class="stat-name">成品尺寸</span></div>
+      </div>
+      <div class="palette-strip" id="paletteStrip" title="本作品用到的拼豆色板"></div>
+      <div class="bom-preview" id="bomPreview">
+        <p class="hint">材料清单会出现在这里——每种色号需要多少颗豆。</p>
+      </div>
+      <div class="panel-divider"></div>
+      <h3 class="panel-title">④ 导出带走</h3>
+      <div class="export-btns">
+        <button class="btn btn-mini btn-wide" id="btnExportPng" disabled>🖼 分层图纸 PNG（带色号）</button>
+        <button class="btn btn-mini btn-wide" id="btnExportCsv" disabled>📋 材料清单 CSV</button>
+        <button class="btn btn-mini btn-wide" id="btnExportJson" disabled>💾 作品文件 JSON</button>
+        <button class="btn btn-mini btn-wide" id="btnImportJson">📂 载入作品 JSON</button>
+        <button class="btn btn-mini btn-wide" id="btnShareCard" disabled>🎴 生成分享卡片</button>
+      </div>
+      <p class="hint">图纸按「每层一张网格图」输出，色号即拼豆色板编号；打印后按层拼、逐层叠，就是立体作品。快捷键：1/2/3 切模式，空格放豆，R 复位，S 自转。</p>
+    </aside>
+  </div>
+</section>
+
+<!-- ==================== 拍摄指南 ==================== -->
+<section class="shooting" id="shooting">
+  <div class="section-head">
+    <p class="section-kicker">STEP 06 · 怎么拍</p>
+    <h2 class="section-title">拍出能拼的 360° 素材 <em>AI 摄影教练</em></h2>
+    <p class="section-desc">拼豆质量的上限，在按下录制键之前就决定了。以下参数来自影石官方 3DGS 拍摄指南，我们把它翻译成了「拼豆工坊」的采集规范。</p>
+  </div>
+
+  <div class="shoot-grid">
+    <div class="shoot-card shoot-device">
+      <h3>📹 设备与参数</h3>
+      <table class="param-table">
+        <tr><td>相机</td><td><b>影石 X 系列全景相机</b>（推荐 X5）+ 3米自拍杆</td></tr>
+        <tr><td>模式</td><td><b>8K 30fps 全景视频</b>，开启运动 HDR</td></tr>
+        <tr><td>参数</td><td>固定参数，关闭自动；拍摄前擦拭镜头</td></tr>
+        <tr><td>距离</td><td>相机距主体 <b>1–2 米</b>，镜头正对主体</td></tr>
+        <tr><td>速度</td><td>匀速步行 <b>&lt; 1 m/s</b>，光线暗时更慢</td></tr>
+        <tr><td>时长</td><td>单次录制 <b>3–5 分钟</b>，大场景分镜拍</td></tr>
+        <tr><td>导出</td><td>数据线导出 <b>.insv</b> → App/Studio 拼成全景</td></tr>
+      </table>
+    </div>
+
+    <div class="shoot-card shoot-path">
+      <h3>🛤 拍摄路径模拟器</h3>
+      <canvas id="pathCanvas" width="520" height="300"></canvas>
+      <div class="path-btns" id="pathBtns">
+        <button class="tool active" data-path="orbit">环绕</button>
+        <button class="tool" data-path="spiral">螺旋</button>
+        <button class="tool" data-path="grid">井字</button>
+      </div>
+      <p class="hint" id="pathHint">环绕拍摄：围绕主体缓慢转圈，相邻视角保持 70–80% 重叠。</p>
+    </div>
+
+    <div class="shoot-card shoot-rules">
+      <h3>📏 六字诀</h3>
+      <ul class="rule-list">
+        <li><b>慢</b>速度 &lt; 1m/s，模糊是重建的天敌</li>
+        <li><b>近</b>距主体 1–2m，细节才够拼</li>
+        <li><b>绕</b>多角度移动，不要原地转圈子</li>
+        <li><b>叠</b>相邻画面 70–80% 重叠</li>
+        <li><b>饱</b>角落、阴影处靠近补拍</li>
+        <li><b>环</b>回到起点结束，数据闭环</li>
+      </ul>
+    </div>
+
+    <div class="shoot-card shoot-sdk">
+      <h3>🔌 影石开发接口（路线图）</h3>
+      <ul class="sdk-list">
+        <li><b>Camera SDK</b>（Android/iOS/桌面）实时预览双鱼眼流，<code>OnGyroData</code> 输出陀螺仪——拍摄教练的姿态感知基础</li>
+        <li><b>Media SDK</b>（X 系列）双鱼眼实时拼接为 ERP 全景画面</li>
+        <li><b>OSC 协议</b>（WiFi HTTP/JSON）远程控制拍摄、<code>photoStitching:"ondevice"</code> 直接下载机内拼接全景图</li>
+        <li><b>Metadata SDK</b>（Offset 版）相机内参，用于与激光雷达等点云对齐</li>
+      </ul>
+      <p class="hint">规划中的「实时 AI 拍摄教练」将基于 Camera SDK 预览流 + 姿态数据，在取景时实时提示速度、重叠度与覆盖盲区。</p>
+    </div>
+
+    <div class="shoot-card shoot-check">
+      <h3>✅ 拍摄自检清单</h3>
+      <p class="hint">拍完对照打分，80 分以上就是优质素材：</p>
+      <div class="check-score"><div class="check-score-fill" id="checkFill"></div><span id="checkScore">0 / 100</span></div>
+      <ul class="check-list" id="checkList"></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== AI 能力 ==================== -->
+<section class="ai" id="ai">
+  <div class="section-head section-head-light">
+    <p class="section-kicker">STEP 07 · AI 在哪里</p>
+    <h2 class="section-title">五个环节，<em>都有 AI 在干活</em></h2>
+    <p class="section-desc">对应赛题「用 AI 重新定义怎么拍和怎么看」：拍摄前有教练，拍摄后有深度之眼，拼装有配色引擎，全程有助手。</p>
+  </div>
+  <div class="ai-grid">
+    <article class="ai-card">
+      <span class="ai-tag">怎么看 · 深度之眼</span>
+      <h3>AI 全景深度估计</h3>
+      <p>Depth Anything V2 以 ONNX Runtime Web 跑在浏览器里（WebGPU/WASM 自动切换），把一张平面全景图变成带深度信息的球面场景——与影石研究院 DAP 的「ERP→深度→点云」流程同构。</p>
+    </article>
+    <article class="ai-card">
+      <span class="ai-tag">怎么拼 · 配色引擎</span>
+      <h3>感知色差匹配</h3>
+      <p>每个体素颜色在 CIELAB 空间用 CIEDE2000 感知色差匹配到拼豆色板，贪心限色让新手也用得起——解决「色号对不上手里豆子」的老大难。</p>
+    </article>
+    <article class="ai-card">
+      <span class="ai-tag">怎么拍 · 摄影教练</span>
+      <h3>采集规范 AI 化</h3>
+      <p>影石 3DGS 拍摄指南被结构化为参数卡、路径模拟器与自检清单。下一步接入 Camera SDK 预览流与 IMU 数据，实现取景时的实时质量提示。</p>
+    </article>
+    <article class="ai-card">
+      <span class="ai-tag">怎么想 · 创意助手</span>
+      <h3>拼豆 AI 助手</h3>
+      <p>右下角随时提问：拼豆技巧、熨烫温度、图纸怎么看、参数怎么调。内置离线知识库；填入阿里百练 API Key 后即可切换为千问大模型实时回答。</p>
+    </article>
+    <article class="ai-card">
+      <span class="ai-tag">怎么来 · 文字造景</span>
+      <h3>文本 → 360° 全景</h3>
+      <p>「一座云雾中的城堡」直接生成可拼的全景场景——DiT360「文字生成全景」理念的离线程序化实现，让没有相机的人也能玩立体拼豆。</p>
+    </article>
+  </div>
+</section>
+
+<!-- ==================== 技术与赛题 ==================== -->
+<section class="tech" id="tech">
+  <div class="section-head">
+    <p class="section-kicker">STEP 08 · 技术 &amp; 赛题</p>
+    <h2 class="section-title">一条链路，<em>全部跑在浏览器里</em></h2>
+  </div>
+
+  <div class="arch">
+    <div class="arch-flow">
+      <div class="arch-node"><b>素材输入</b><span>影石 X5 全景图 / 360视频 / 程序化场景</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><b>AI 深度估计</b><span>Depth Anything V2 · ONNX Runtime Web</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><b>球面反投影</b><span>ERP→方向向量×深度→点云</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><b>体素化</b><span>64³ 网格 · 孤立体素降噪</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node arch-node-hot"><b>拼豆模型</b><span>CIEDE2000 色板匹配</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-node"><b>交互工坊</b><span>Three.js · 逐层/逐颗拼装</span></div>
+    </div>
+  </div>
+
+  <div class="rubric">
+    <h3 class="rubric-title">评审维度对照</h3>
+    <table class="rubric-table">
+      <thead><tr><th>评审维度</th><th>我们的对应实现</th></tr></thead>
+      <tbody>
+        <tr><td>产品完成度 · 原型完整可展示</td><td>从素材上传到导出的全流程可用，含示例场景一键演示</td></tr>
+        <tr><td>用户与应用价值 · 痛点真实</td><td>「立体拼豆不会画图纸」是调研确认的全市场空白；直给图纸+BOM+色板</td></tr>
+        <tr><td>影像技术应用 · SDK 使用深度</td><td>遵循影石 3DGS 拍摄规范；深度流程与 DAP 同构；规划接入 Camera SDK / Media SDK / OSC</td></tr>
+        <tr><td>AI 技术实际作用与成效</td><td>浏览器端深度估计、感知色差配色、离线知识库+大模型助手、文本造景，五个环节可当场演示</td></tr>
+        <tr><td>技术实现难度与完成质量</td><td>零后端纯静态部署；WebGPU/WASM 自动降级；体素化+孤立降噪+限色量化自研实现</td></tr>
+        <tr><td>路演表述</td><td>3 分钟演示动线：拍（指南）→ 拼（工坊）→ 导出（图纸 BOM）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tech-notes">
+    <div class="note"><b>隐私</b><p>所有计算在本地浏览器完成，素材永不上传。</p></div>
+    <div class="note"><b>离线</b><p>模型与依赖全部内置（约 42MB），断网可演示。</p></div>
+    <div class="note"><b>开源</b><p>Three.js / ONNX Runtime Web / Depth Anything V2，均为 MIT/Apache-2.0。</p></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div>
+      <p class="footer-logo">BeadOrbit<span>360°立体拼豆工坊</span></p>
+      <p class="footer-note">2026 影石 Insta360 Bold Maker 智能影像挑战赛 · AI+影像产品开发赛道参赛作品<br>用 AI 重新定义「怎么拍」与「怎么看」——以及，「怎么拼」。</p>
+    </div>
+    <div class="footer-links">
+      <a href="#studio">拼豆工坊</a><a href="#shooting">拍摄指南</a><a href="#ai">AI 能力</a><a href="#tech">技术</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ==================== AI 助手 ==================== -->
+<button class="fab" id="fabAssistant" title="AI 拼豆助手">🤖</button>
+<div class="assistant" id="assistantPanel" hidden>
+  <header class="assistant-head">
+    <div><b>拼豆 AI 助手</b><span id="assistantMode">离线知识库模式</span></div>
+    <div class="assistant-head-btns">
+      <button class="icon-btn" id="btnAssistantSettings" title="设置">⚙</button>
+      <button class="icon-btn" id="btnAssistantClose" title="关闭">✕</button>
+    </div>
+  </header>
+  <div class="assistant-body" id="assistantBody"></div>
+  <div class="assistant-chips" id="assistantChips"></div>
+  <form class="assistant-input" id="assistantForm">
+    <input type="text" id="assistantText" placeholder="问点什么：怎么拼球形？熨烫温度？…" autocomplete="off">
+    <button type="submit" class="btn btn-mini">发送</button>
+  </form>
+</div>
+
+<!-- ==================== 设置弹窗 ==================== -->
+<div class="modal" id="settingsModal" hidden>
+  <div class="modal-card">
+    <h3>AI 助手设置</h3>
+    <p class="hint">默认使用内置离线知识库，无需联网。填入阿里百练（DashScope）API Key 后，助手将切换为千问大模型实时回答（Key 仅保存在本机浏览器）。</p>
+    <label>API Key（DashScope / OpenAI 兼容）</label>
+    <input type="password" id="inputApiKey" placeholder="sk-…">
+    <label>接口地址（可选）</label>
+    <input type="text" id="inputApiBase" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1">
+    <label>模型（可选）</label>
+    <input type="text" id="inputApiModel" placeholder="qwen-plus">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="btnClearKey">清除 Key</button>
+      <button class="btn btn-primary" id="btnSaveSettings">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
