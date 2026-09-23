@@ -132,10 +132,12 @@ export class BeadViewer {
         this.ghostRing.material.opacity = 0.4 + Math.sin(now / 180) * 0.2;
       }
       // 熨烫热光衰减
-      if (this.heatLight && this.heatLight.intensity > 0.05) {
+      if (this.heatLight && this.heatLight.intensity > 0.05 && !this.ironAnim) {
         this.heatLight.intensity *= 0.94;
         if (this.heatLight.intensity <= 0.05) this.heatLight.intensity = 0;
       }
+      // 熨烫动画
+      if (this.ironAnim) this._updateIronAnim(now);
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
     };
@@ -350,6 +352,28 @@ export class BeadViewer {
     }
     this.controls.update();
   }
+  /** 发热层持续暖光（熨烫后冷却期间） */
+  updateHeat(project) {
+    let hottest = -1, h = 0;
+    for (let y = 0; y < project.h; y++) {
+      const heat = 1 - project.cool[y];
+      let has = false;
+      for (let i = 0; i < project.layers[y].length; i++) if (project.layers[y][i] > 0) { has = true; break; }
+      if (has && heat > h) { h = heat; hottest = y; }
+    }
+    if (hottest >= 0 && h > 0.02) {
+      if (!this.heatLight) {
+        this.heatLight = new THREE.PointLight(0xff7a33, 0, 60, 1.6);
+        this.scene.add(this.heatLight);
+      }
+      this.heatLight.position.set(0, hottest + 1.3, 0);
+      this.heatLight.intensity = 7 + Math.sin(performance.now() / 200) * 1.5;
+      this.heatLight.intensity *= h;
+    } else if (this.heatLight) {
+      this.heatLight.intensity = 0;
+    }
+  }
+
   /** 从工程同步 3D 模型（保留相机与建造进度） */
   syncProject(project, opts = {}) {
     const beads = [];
@@ -527,6 +551,155 @@ export class BeadViewer {
     }
     this.heatLight.position.set(0, y + 1.2, 0);
     this.heatLight.intensity = 26;
+  }
+
+  // ---------- 熨烫动画：熨斗 + 熨烫纸 + 逐颗渐进熔合 ----------
+  _ensureIronProps() {
+    if (this.ironGroup) return;
+    // 熨烫纸（半透明羊皮纸）
+    this.paperMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        color: 0xf5e9c8, transparent: true, opacity: 0.34,
+        side: THREE.DoubleSide, depthWrite: false,
+      })
+    );
+    this.paperMesh.rotation.x = -Math.PI / 2;
+    this.paperMesh.visible = false;
+    this.scene.add(this.paperMesh);
+    // 熨斗（底板 + 手柄）
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(2.6, 0.5, 1.7),
+      new THREE.MeshLambertMaterial({ color: 0x3a3f45 })
+    );
+    body.position.y = 0.55;
+    g.add(body);
+    const sole = new THREE.Mesh(
+      new THREE.BoxGeometry(2.7, 0.12, 1.8),
+      new THREE.MeshLambertMaterial({ color: 0xc9ced4, emissive: 0x883300 })
+    );
+    sole.position.y = 0.3;
+    g.add(sole);
+    const handle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.7, 0.22),
+      new THREE.MeshLambertMaterial({ color: 0x8a2f22 })
+    );
+    handle.position.set(0, 1.1, 0);
+    g.add(handle);
+    g.visible = false;
+    this.ironGroup = g;
+    this.scene.add(g);
+  }
+
+  /**
+   * 开始熨烫动画
+   * @param layerY 层 @param level 目标熔合等级 0-3 @param passes 走熨遍数 @param durationMs 总时长
+   * @param onDone 完成回调
+   */
+  startIroning(layerY, level, passes = 2, durationMs = 3200, onDone = null) {
+    if (!this.total) return;
+    this._ensureIronProps();
+    // 找到该层豆子的实例区间（beads 按 y 排序，同层连续）
+    let start = -1, end = -1;
+    for (let i = 0; i < this.beads.length; i++) {
+      if (this.beads[i].y === layerY) { if (start < 0) start = i; end = i + 1; }
+      else if (start >= 0 && this.beads[i].y > layerY) break;
+    }
+    if (start < 0) { onDone?.(); return; }
+    const half = this.gridN / 2;
+    const fusionTarget = level / 3;
+    this.ironAnim = {
+      layerY, start, end, level, passes, fusionTarget,
+      t0: performance.now(), duration: durationMs, onDone,
+      half, baseColors: [],
+    };
+    // 备份该层豆子的原始颜色（熨烫会加深）
+    const c = new THREE.Color();
+    for (let i = start; i < end; i++) {
+      this.beadMesh.getColorAt(i, c);
+      this.ironAnim.baseColors.push(c.clone());
+    }
+    // 纸与熨斗就位
+    const size = Math.max(this.gridN, 8);
+    this.paperMesh.scale.set(size * 1.02, size * 1.02, 1);
+    this.paperMesh.position.set(0, layerY + 0.62, 0);
+    this.paperMesh.visible = true;
+    this.ironGroup.visible = true;
+    this.ironGroup.scale.setScalar(Math.max(0.6, size / 24));
+    // 熨烫时锁定视角到俯视
+    this.controls.autoRotate = false;
+  }
+
+  _updateIronAnim(now) {
+    const a = this.ironAnim;
+    if (!a) return;
+    const k = (now - a.t0) / a.duration;
+    const size = Math.max(this.gridN, 8);
+    if (k >= 1) {
+      // 完成：该层全部达到目标熔合
+      this._applyFusionRange(a.start, a.end, a.fusionTarget, a);
+      this.paperMesh.visible = false;
+      this.ironGroup.visible = false;
+      this.ironAnim = null;
+      this.heatPulse(a.layerY);
+      a.onDone?.();
+      return;
+    }
+    // 熨斗位置：往返扫过（每个 pass 一遍）
+    const sweep = (k * a.passes) % 1;
+    const ironX = (sweep < 0.5 ? sweep * 2 : 2 - sweep * 2) * size - size / 2;
+    this.ironGroup.position.set(ironX, a.layerY + 0.5, 0);
+    // 纸的透明度随加热轻微变化
+    this.paperMesh.material.opacity = 0.3 + Math.sin(now / 120) * 0.04;
+    // 已扫过的豆子 progressive 熔合
+    const front = ironX + size * 0.12;
+    for (let i = a.start; i < a.end; i++) {
+      const b = this.beads[i];
+      const bx = b.x - a.half + 0.5;
+      const d = front - bx;                       // >0 表示熨斗已经过
+      const f = a.fusionTarget * Math.max(0, Math.min(1, d / (size * 0.1)));
+      this._applyFusionRange(i, i + 1, f, a);
+    }
+    // 熨斗下方热光
+    if (this.heatLight) {
+      this.heatLight.position.set(ironX, a.layerY + 1.4, 0);
+      this.heatLight.intensity = 14 + Math.sin(now / 90) * 4;
+    }
+  }
+
+  /** 把实例区间的豆子设置为指定熔合度（含胀大/孔闭合/颜色加深） */
+  _applyFusionRange(from, to, fusion, anim) {
+    if (!this.beadMesh) return;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const col = new THREE.Color();
+    const s = 1 + fusion * 0.12;
+    for (let i = from; i < to; i++) {
+      const b = this.beads[i];
+      m.compose(
+        new THREE.Vector3(b.x - anim.half + 0.5, b.y + 0.5, b.z - anim.half + 0.5),
+        q, new THREE.Vector3(s, s * (1 - fusion * 0.12), s)
+      );
+      this.beadMesh.setMatrixAt(i, m);
+      // 颜色：熔合加深 + 熨斗下偏暖
+      const base = anim.baseColors[i - anim.start];
+      if (base) {
+        col.copy(base).multiplyScalar(1 - fusion * 0.07);
+        if (fusion > 0 && fusion < 1) col.lerp(new THREE.Color(0xff9a55), fusion * 0.12);
+        this.beadMesh.setColorAt(i, col);
+      }
+      // 孔：熔合后缩小消失
+      const hs = fusion > 0.72 ? 0 : 1 - fusion * 0.3;
+      m.compose(
+        new THREE.Vector3(b.x - anim.half + 0.5, b.y + 0.52, b.z - anim.half + 0.5),
+        q, new THREE.Vector3(hs, hs, hs)
+      );
+      this.holeMesh.setMatrixAt(i, m);
+    }
+    this.beadMesh.instanceMatrix.needsUpdate = true;
+    this.holeMesh.instanceMatrix.needsUpdate = true;
+    if (this.beadMesh.instanceColor) this.beadMesh.instanceColor.needsUpdate = true;
   }
 
   dispose() {

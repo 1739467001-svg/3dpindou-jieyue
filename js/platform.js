@@ -3,7 +3,7 @@
 // 把 2D 拼豆完整工作流（摆豆/图层/色板/限色/BOM/熨烫）搬进 3D 工坊
 // ============================================================
 
-import { BeadProject, STANDARD_BOARD } from './project.js';
+import { BeadProject, STANDARD_BOARD, COOL_MS } from './project.js';
 import { LayerCanvas } from './editor2d.js';
 import { BRAND_PALETTES, BRAND_ORDER } from './brand-palettes.js';
 import { PALETTES, PaletteMatcher, hexToRgb } from './palette.js';
@@ -168,7 +168,91 @@ function initToolbar() {
     $('btnCodes').classList.toggle('active', state.layerCanvas.showCodes);
     state.layerCanvas.redraw();
   });
+  bind('btnTabs', () => generateTabs());
+  bind('btnHollow', () => hollowInterior());
 }
+// ---------- 互锁 tabs 生成（立体组装工艺） ----------
+// 现实工艺：立体片边缘做 1 格凸榫（tab），与另一片的凹槽（slot）互锁，
+// 靠摩擦定型，太松再点热熔胶。这里为当前层四边自动生成凸榫。
+function generateTabs(interval = 4) {
+  const p = state.project;
+  if (!p) return;
+  const y = p.current;
+  const layer = p.layers[y];
+  let x0 = 1e9, x1 = -1, z0 = 1e9, z1 = -1;
+  for (let z = 0; z < p.d; z++) for (let x = 0; x < p.w; x++) {
+    if (layer[z * p.w + x] > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  }
+  if (x1 < x0) return state.ctx.toast('当前层是空的，先摆豆', 'err');
+  p.snapshot();
+  // 扩大 2 格边界以容纳凸榫
+  const q = new BeadProject(p.w + 2, p.d + 2, p.h, p.palette);
+  q.name = p.name;
+  q.current = p.current;
+  q.iron.set(p.iron);
+  q.cool.set(p.cool);
+  for (let yy = 0; yy < p.h; yy++) {
+    for (let z = 0; z < p.d; z++) {
+      for (let x = 0; x < p.w; x++) {
+        q.layers[yy][(z + 1) * q.w + (x + 1)] = p.layers[yy][z * p.w + x];
+      }
+    }
+  }
+  const ax0 = x0 + 1, ax1 = x1 + 1, az0 = z0 + 1, az1 = z1 + 1;
+  const put = (x, z, sx, sz) => {
+    if (!q.inBounds(x, z)) return 0;
+    const inner = q.layers[y][(z + sz) * q.w + (x + sx)];
+    if (inner > 0 && q.layers[y][z * q.w + x] === 0) { q.layers[y][z * q.w + x] = inner; return 1; }
+    return 0;
+  };
+  let tabs = 0;
+  for (let x = ax0; x <= ax1; x += interval) {
+    tabs += put(x, az0 - 1, 0, 1);
+    tabs += put(x, az1 + 1, 0, -1);
+  }
+  for (let z = az0; z <= az1; z += interval) {
+    tabs += put(ax0 - 1, z, 1, 0);
+    tabs += put(ax1 + 1, z, -1, 0);
+  }
+  // 用新工程替换
+  Object.assign(state.project, q);
+  state.layerCanvas.project = q;
+  state.layerCanvas.resetView();
+  state.viewer.buildPegboard(q);
+  state.viewer.syncProject(q);
+  syncAll();
+  state.ctx.toast(`已生成 ${tabs} 个互锁凸榫（每 ${interval} 格一个）—— mating 片对应位置留空作 slot，先摆好后点胶`, 'ok', 5000);
+}
+
+// ---------- 内部层空心省豆 ----------
+// 现实工艺：轮廓层实心、内部层只留边框，省豆减重（官方 3D 项目同款技巧）
+function hollowInterior() {
+  const p = state.project;
+  if (!p) return;
+  let saved = 0;
+  p.snapshot();
+  for (let y = 1; y < p.h - 1; y++) {
+    if (y === p.current) continue;
+    const l = p.layers[y];
+    const copy = l.slice();
+    for (let z = 1; z < p.d - 1; z++) {
+      for (let x = 1; x < p.w - 1; x++) {
+        const i = z * p.w + x;
+        if (copy[i] > 0 && copy[i - 1] > 0 && copy[i + 1] > 0 && copy[i - p.w] > 0 && copy[i + p.w] > 0) {
+          l[i] = 0;
+          saved++;
+        }
+      }
+    }
+  }
+  syncAll();
+  if (saved > 0) {
+    state.ctx.toast(`内部层已空心化，节省 ${saved} 颗豆（悬空豆警示会标出需要补支撑的位置）`, 'ok', 5000);
+  } else {
+    state.ctx.toast('没有可空心化的内部层', '');
+  }
+}
+
 function toggleMirror(axis) {
   if (!state.layerCanvas) return;
   state.layerCanvas.mirror[axis] = !state.layerCanvas.mirror[axis];
@@ -228,7 +312,8 @@ function updatePaletteCurrent() {
   $('palGrid').querySelectorAll('i').forEach((el, i) => el.classList.toggle('sel', i === state.color));
 }
 
-// ---------- 熨烫面板 ----------
+// ---------- 熨烫面板（动画 + 冷却） ----------
+let coolTimer = null;
 function initIronPanel() {
   const update = () => {
     const temp = parseInt($('rngTemp').value);
@@ -248,16 +333,35 @@ function initIronPanel() {
   ['rngTemp', 'rngSec', 'selSides'].forEach(id => $(id).addEventListener('input', update));
   update();
 
+  // 熨烫：播放「熨斗+熨烫纸+渐进熔合」动画，结束后才落状态
   const doIron = (all) => {
     const p = state.project;
-    if (!p) return;
+    if (!p || state.ironing) return;
     const r = update();
-    p.snapshot();
-    applyIron(p, all ? -1 : p.current, r.level);
-    state.viewer.heatPulse(p.current);
-    syncAll();
+    const layers = all ? p.layers.map((l, y) => y).filter(y => p.layers[y].some(v => v > 0)) : [p.current];
+    if (!layers.length) return state.ctx.toast('没有可熨烫的层', 'err');
+    state.ironing = true;
     const names = ['未熨烫', '轻熨', '标准熨', '全熔'];
-    state.ctx.toast(`${all ? '全部层' : `第 ${p.current + 1} 层`}已熨烫：${names[r.level]}`, r.level >= 3 ? 'err' : 'ok', 3000);
+    p.snapshot();
+    const sides = parseInt($('selSides').value);
+    const dur = 900 + layers.length * 1400;
+    let i = 0;
+    const next = () => {
+      if (i >= layers.length) {
+        state.ironing = false;
+        syncAll();
+        state.ctx.toast(`熨烫完成：${names[r.level]}——作品还发烫，冷却 ${COOL_MS / 1000} 秒后才能叠层`, r.level >= 3 ? 'err' : 'ok', 5000);
+        return;
+      }
+      const y = layers[i++];
+      state.viewer.startIroning(y, r.level, sides, Math.min(2600, dur / layers.length), () => {
+        applyIron(p, y, r.level);
+        p.cool[y] = 0;              // 刚熨完：发烫
+        startCooling();
+        next();
+      });
+    };
+    next();
   };
   $('btnIronLayer').addEventListener('click', () => doIron(false));
   $('btnIronAll').addEventListener('click', () => doIron(true));
@@ -266,9 +370,87 @@ function initIronPanel() {
     if (!p) return;
     p.snapshot();
     applyIron(p, -1, 0);
+    p.cool.fill(1);
     syncAll();
     state.ctx.toast('已重置熨烫状态');
   });
+}
+
+// 冷却计时：真实时间流逝，发热层逐渐降温
+function startCooling() {
+  if (coolTimer) return;
+  coolTimer = setInterval(() => {
+    const p = state.project;
+    if (!p) { stopCooling(); return; }
+    if (p.tickCooling(400)) {
+      state.viewer.updateHeat(p);
+      renderLayerChips();
+      updateHotWarning();
+    } else {
+      stopCooling();
+    }
+  }, 400);
+}
+function stopCooling() {
+  if (coolTimer) { clearInterval(coolTimer); coolTimer = null; }
+}
+
+// ---------- 制作看板（每层工艺状态） ----------
+function layerStatus(p, y) {
+  const has = p.layers[y].some(v => v > 0);
+  if (!has) return { key: 'empty', label: '空', icon: '⬜' };
+  if (p.iron[y] >= 3) return { key: 'full', label: '全熔', icon: '⚠️' };
+  if (p.iron[y] > 0) {
+    return p.cool[y] < 1
+      ? { key: 'hot', label: '冷却中', icon: '🔥' }
+      : { key: 'done', label: '已熨已冷', icon: '✅' };
+  }
+  return { key: 'placed', label: '已摆未熨', icon: '🧩' };
+}
+function renderLayerChips() {
+  const p = state.project;
+  const wrap = $('layerChips');
+  if (!p || !wrap) return;
+  wrap.innerHTML = '';
+  for (let y = 0; y < p.h; y++) {
+    const st = layerStatus(p, y);
+    const count = p.layers[y].reduce((s, v) => s + (v > 0 ? 1 : 0), 0);
+    const chip = document.createElement('button');
+    chip.className = `lchip st-${st.key}${y === p.current ? ' cur' : ''}`;
+    chip.innerHTML = `<b>${y + 1}</b><span>${st.icon}</span><i>${count}</i>`;
+    chip.title = `第 ${y + 1} 层：${st.label} · ${count} 颗`;
+    chip.addEventListener('click', () => {
+      p.current = y;
+      state.viewer.buildPegboard(p);
+      state.viewer.syncProject(p);
+      syncAll();
+    });
+    wrap.appendChild(chip);
+  }
+}
+function updateHotWarning() {
+  const p = state.project;
+  if (!p) return;
+  const warn = $('warnBox');
+  const floating = p.floatingBeads();
+  const curHas = p.layers[p.current].some(v => v > 0);
+  if (p.isHot(p.current) && curHas) {
+    // 本层刚熨完：现实里完全冷却前不能叠层、不能揭纸
+    const pct = Math.round(p.cool[p.current] * 100);
+    warn.hidden = false;
+    warn.innerHTML = `🔥 <b>本层刚熨完，冷却中 ${pct}%</b>——现实里完全冷却前不要叠层、不要揭纸（会粘住豆子）。`;
+  } else if (p.belowHot()) {
+    warn.hidden = false;
+    warn.innerHTML = '🔥 <b>下层还在降温</b>——现实里现在叠层会烫坏豆子、导致移位。等它完全冷却（状态变 ✅）再摆下一层。';
+  } else if (floating > 0) {
+    warn.hidden = false;
+    warn.innerHTML = `⚠️ <b>${floating}</b> 颗豆悬空（下方没有支撑）——现实里会掉。<br>请在下一层对应位置补豆，或把本层豆移到有支撑处。`;
+  } else if (p.totalBeads() > 0 && p.current > 0) {
+    warn.hidden = false;
+    warn.innerHTML = '✅ 本层所有豆子都有支撑，结构稳定。';
+  } else {
+    warn.hidden = true;
+  }
 }
 
 // ---------- 同步（3D + 统计 + BOM + 警示） ----------
@@ -313,20 +495,18 @@ function syncAll() {
   $('statColors').textContent = colorCount;
   $('statLayers').textContent = layersUsed;
   $('statSize').textContent = stats.sizeText;
+  // 重量估算：2.6mm 豆约 0.028g/颗，5mm 约 0.11g/颗
+  const perG = p.palette.diameterMm <= 3 ? 0.028 : 0.11;
+  const grams = beadCount * perG;
+  $('statWeight').textContent = grams < 1000 ? `${grams.toFixed(0)}g` : `${(grams / 1000).toFixed(2)}kg`;
+  $('statWeightCard').hidden = false;
   $('layerCur').textContent = p.current + 1;
   $('layerTotal').textContent = p.h;
 
-  // 悬空警示
-  const warn = $('warnBox');
-  if (floating > 0) {
-    warn.hidden = false;
-    warn.innerHTML = `⚠️ <b>${floating}</b> 颗豆悬空（下方没有支撑）——现实里会掉。<br>请在下一层对应位置补豆，或把本层豆移到有支撑处。`;
-  } else if (beadCount > 0 && p.current > 0) {
-    warn.hidden = false;
-    warn.innerHTML = `✅ 本层所有豆子都有支撑，结构稳定。`;
-  } else {
-    warn.hidden = true;
-  }
+  // 工艺状态警示（悬空 / 下层未冷）
+  updateHotWarning();
+  renderLayerChips();
+  state.viewer.updateHeat(p);
 
   // 色板条 + BOM
   const strip = $('paletteStrip');
@@ -407,6 +587,13 @@ function bridgeFromAI() {
 }
 // ---------- 模板生成 ----------
 function buildTemplate(kind, palette) {
+  // 模板颜色按 CIEDE2000 就近匹配到所选色板（精确 hex 不一定存在）
+  const matcher = new PaletteMatcher(palette);
+  // 注意：调用处传参为 (palette, hex)，第一参数忽略
+  const colorIdx = (_palette, hex) => {
+    const [r, g, b] = hexToRgb(hex);
+    return matcher.match(r, g, b) + 1;
+  };
   let p;
   if (kind === 'box') {
     p = new BeadProject(16, 16, 10, palette);
@@ -445,10 +632,6 @@ function buildTemplate(kind, palette) {
     }
   }
   return p;
-}
-function colorIdx(palette, hex) {
-  const i = palette.colors.findIndex(c => c.hex.toLowerCase() === hex.toLowerCase());
-  return i >= 0 ? i : 0;
 }
 function clampInt(v, min, max, dft) {
   const n = parseInt(v);

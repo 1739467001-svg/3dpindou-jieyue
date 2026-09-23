@@ -318,6 +318,8 @@
         </div>
         <div class="tool-group">
           <button class="etool" id="btnCodes" title="显示色号">🔤</button>
+          <button class="etool" id="btnTabs" title="生成互锁 tabs（立体组装）">🧲</button>
+          <button class="etool" id="btnHollow" title="内部层空心省豆">🕳</button>
         </div>
       </div>
 
@@ -370,6 +372,8 @@
           <span class="layer-sep"></span>
           <button class="etool" id="btnIronBadge" title="当前层熨烫状态">🔥</button>
         </div>
+        <!-- 制作看板：每层工艺状态 -->
+        <div class="layer-chips" id="layerChips"></div>
         <canvas id="boardCanvas"></canvas>
         <div class="palette-picker">
           <div class="pal-current">
@@ -390,6 +394,7 @@
         <div class="stat"><span class="stat-num" id="statColors">—</span><span class="stat-name">用到颜色</span></div>
         <div class="stat"><span class="stat-num" id="statLayers">—</span><span class="stat-name">层数</span></div>
         <div class="stat"><span class="stat-num" id="statSize">—</span><span class="stat-name">成品尺寸</span></div>
+        <div class="stat" id="statWeightCard" hidden><span class="stat-num" id="statWeight">—</span><span class="stat-name">预估重量</span></div>
       </div>
       <div class="warn-box" id="warnBox" hidden></div>
       <div class="palette-strip" id="paletteStrip" title="本作品用到的拼豆色板"></div>

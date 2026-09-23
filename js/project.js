@@ -5,6 +5,7 @@
 // ============================================================
 
 export const STANDARD_BOARD = 29; // 标准钉板 29×29
+export const COOL_MS = 10000;     // 熨烫后真实冷却时间（现实里要完全冷却才能叠层）
 
 export class BeadProject {
   /**
@@ -19,6 +20,7 @@ export class BeadProject {
     this.layers = Array.from({ length: this.h }, () => new Uint16Array(this.w * this.d));
     this.current = 0;               // 当前编辑层
     this.iron = new Uint8Array(this.h); // 每层熨烫等级 0-3
+    this.cool = new Float32Array(this.h).fill(1); // 每层冷却度 1=已冷 0=刚熨完发烫
     this.name = '未命名作品';
     this.history = [];
     this.future = [];
@@ -26,6 +28,26 @@ export class BeadProject {
   }
 
   onChange(fn) { this.listeners.push(fn); }
+  /** 推进冷却计时（ms），有层在降温时返回 true */
+  tickCooling(dtMs) {
+    let changed = false;
+    for (let y = 0; y < this.h; y++) {
+      if (this.cool[y] < 1) {
+        this.cool[y] = Math.min(1, this.cool[y] + dtMs / COOL_MS);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+  /** 某层是否还发烫 */
+  isHot(y) { return this.cool[y] < 1; }
+  /** 下方最近一层是否还烫（叠层警示用） */
+  belowHot() {
+    for (let y = this.current - 1; y >= 0; y--) {
+      if (this.layers[y].some(v => v > 0)) return this.cool[y] < 1;
+    }
+    return false;
+  }
   emit(type) { this.listeners.forEach(fn => fn(type, this)); }
 
   // ---------- 历史 ----------
@@ -34,6 +56,7 @@ export class BeadProject {
       layers: this.layers.map(l => l.slice()),
       current: this.current,
       iron: this.iron.slice(),
+      cool: this.cool.slice(),
     });
     if (this.history.length > 40) this.history.shift();
     this.future.length = 0;
@@ -45,10 +68,12 @@ export class BeadProject {
       layers: this.layers.map(l => l.slice()),
       current: this.current,
       iron: this.iron.slice(),
+      cool: this.cool.slice(),
     });
     this.layers = prev.layers;
     this.current = Math.min(prev.current, this.h - 1);
     this.iron = prev.iron;
+    this.cool = prev.cool;
     this.emit('undo');
     return true;
   }
@@ -59,10 +84,12 @@ export class BeadProject {
       layers: this.layers.map(l => l.slice()),
       current: this.current,
       iron: this.iron.slice(),
+      cool: this.cool.slice(),
     });
     this.layers = next.layers;
     this.current = Math.min(next.current, this.h - 1);
     this.iron = next.iron;
+    this.cool = next.cool;
     this.emit('redo');
     return true;
   }
@@ -187,6 +214,7 @@ export class BeadProject {
     if (this.h >= 80) return false;
     this.layers.splice(this.current + 1, 0, new Uint16Array(this.w * this.d));
     this.iron = new Uint8Array([...this.iron.slice(0, this.current + 1), 0, ...this.iron.slice(this.current + 1)]);
+    this.cool = new Float32Array([...this.cool.slice(0, this.current + 1), 1, ...this.cool.slice(this.current + 1)]);
     this.h++;
     this.current++;
     this.emit('layers');
@@ -289,6 +317,7 @@ export class BeadProject {
       w: this.w, d: this.d, h: this.h,
       palette: { name: this.palette.name, colors: this.palette.colors },
       iron: [...this.iron],
+      cool: [...this.cool],
       // 只序列化非空层，压缩体积
       layers: this.layers.map((l, y) => {
         const cells = [];
@@ -311,6 +340,7 @@ export class BeadProject {
       }
     });
     if (obj.iron) p.iron = new Uint8Array(obj.iron);
+    if (obj.cool) p.cool = new Float32Array(obj.cool);
     return p;
   }
 }

@@ -816,3 +816,29 @@ section { padding: 96px 32px; position: relative; }
   #boardCanvas { height: 300px; }
   .editor-toolbar { gap: 6px; }
 }
+
+/* ============ 制作看板（每层工艺状态） ============ */
+.layer-chips {
+  display: flex; gap: 5px; padding: 8px 10px 0; overflow-x: auto;
+  border-bottom: 1px dashed #211b1433; background: var(--paper);
+  scrollbar-width: thin;
+}
+.lchip {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  border: 2px solid var(--line); border-radius: 9px; background: #fff;
+  padding: 4px 8px; font-size: 12px; cursor: pointer; min-height: 34px;
+  transition: transform 0.12s;
+}
+.lchip:hover { transform: translateY(-1px); }
+.lchip b { font-family: var(--font-mono); font-size: 12px; }
+.lchip i { font-style: normal; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+.lchip.cur { outline: 2.5px solid var(--coral); outline-offset: 1px; }
+.lchip.st-empty { opacity: 0.55; }
+.lchip.st-placed { background: var(--paper-2); }
+.lchip.st-done { background: #0e8f8622; border-color: var(--teal); }
+.lchip.st-hot { background: #dd4b2622; border-color: var(--coral); animation: hotPulse 1s infinite; }
+.lchip.st-full { background: #e6a23c33; border-color: var(--mustard); }
+@keyframes hotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(221,75,38,0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(221,75,38,0); }
+}
