@@ -68,6 +68,28 @@ function initNav() {
     nav.classList.toggle('scrolled', window.scrollY > 40);
   }, { passive: true });
 
+  // 手机端汉堡菜单
+  const toggle = $('navToggle');
+  const navPanel = $('navLinks');
+  if (toggle && navPanel) {
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = navPanel.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      toggle.setAttribute('aria-label', open ? '关闭菜单' : '打开菜单');
+    });
+    navPanel.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+      navPanel.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }));
+    document.addEventListener('click', (e) => {
+      if (navPanel.classList.contains('open') && !navPanel.contains(e.target) && e.target !== toggle) {
+        navPanel.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
   const links = document.querySelectorAll('.nav-links a');
   const map = new Map();
   links.forEach(a => {
@@ -497,6 +519,10 @@ async function build() {
     $('stageOverlay').style.display = 'none';
     $('stageTools').hidden = false;
     $('stageHud').hidden = false;
+    // 手机端：拼豆完成后自动把 3D 舞台滚到视野中央（否则模型在首屏下方）
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      setTimeout(() => $('stage').scrollIntoView({ behavior: 'smooth', block: 'center' }), 250);
+    }
     const dt = ((performance.now() - t0) / 1000).toFixed(1);
     toast(`拼豆完成！${stats.beadCount} 颗豆 / ${stats.layerCount} 层，总耗时 ${dt}s`, 'ok', 3600);
   } catch (e) {
